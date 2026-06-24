@@ -1,0 +1,447 @@
+{
+  "meta": {
+    "key": "asadi2025cihmlc",
+    "title": "Clinically-Inspired Hierarchical Multi-Label Classification of Chest X-rays with a Penalty-Based Loss Function",
+    "venue": "arXiv:2502.03591v1, submitted to IEEE (IEEE Transactions format)",
+    "year": 2025,
+    "pages": 9,
+    "format": "IEEE Transactions (2-column, 9 pages main + references)",
+    "institution": "Concordia University (Gina Cody School, Montreal); YULCOM Technologies (Montreal); McGill University Health Centre",
+    "authors": ["Mehrdad Asadi", "Komi Sodoke", "Ian J. Gerard", "Marta Kersten-Oertel"],
+    "local_pdf": "reference/papers/2502.03591v1_CIHMLC_Asadi2025.pdf",
+    "code_repo": "CIHMLC (public Git repository, linked in paper)",
+    "framework": "TensorFlow 2.16.1 / Keras 3.0.5",
+    "hardware": "NVIDIA GeForce RTX 2080 Ti, Intel Core i9-9900K",
+    "headline_results": {
+      "auroc_all_hierarchy_labels": 0.903,
+      "auroc_high_level_labels": 0.904,
+      "auroc_5_chexpert_labels": 0.892,
+      "best_config": "data-driven penalty, scale factor lambda=0.5"
+    },
+    "relevance_to_our_paper": "Nearest prior work. We adopt the HBCE penalty concept but with critical differences: (1) their penalty is a HARD INDICATOR, ours uses ReLU (differentiable); (2) they train from scratch on CheXpert only, we use TorchXRayVision pretrained weights on 6 pooled datasets; (3) they have no inference-time fallback gate — we add MC-Dropout variance gating."
+  },
+  "critical_corrections_vs_prior_json": [
+    "Institution is Concordia University + YULCOM + McGill — NOT unknown",
+    "Dataset is CheXpert ONLY with VisualCheXbert-derived labels — NOT pooled multi-dataset",
+    "Architecture trained FROM SCRATCH (random init) — NOT TorchXRayVision pretrained",
+    "Dropout rate is p=0.5 — NOT p=0.2",
+    "Penalty formula is a HARD INDICATOR FUNCTION — NOT a ReLU product",
+    "Data-driven penalty = empirical co-occurrence ratio with Laplace smoothing — distinct from any formula in our draft",
+    "Image size is 320x320 — NOT 224x224",
+    "Batch size is 16 — NOT 32",
+    "MC-Dropout passes N=10 — NOT T=30 (our project uses T=30)",
+    "AUROC 0.892 on 5 CheXpert labels (our comparable metric), NOT 0.903 (that is over all hierarchy labels)",
+    "Framework is TensorFlow/Keras — NOT PyTorch"
+  ],
+  "abstract": {
+    "purpose": "150-word compress: problem → method → result → interpretability hook",
+    "verbatim_key_claims": [
+      "Novel approach to multi-label CXR classification enhancing clinical interpretability",
+      "Single-model, single-run training pipeline (explicitly called out as a design goal)",
+      "CheXpert dataset + VisualCheXbert-derived labels",
+      "Hierarchical label groupings capturing clinically meaningful relationships",
+      "Custom HBCE loss function: fixed or data-driven penalty types",
+      "Weighted AUROC 0.903 on test set",
+      "Visual explanations (Grad-CAM) and uncertainty estimations (MC-Dropout)"
+    ],
+    "writing_note": "Leads with 'novel approach' + 'clinical interpretability' as dual frame. Always names the dataset. States two penalty modes upfront. AUROC number in abstract = over full hierarchy, not 5-label subset."
+  },
+  "sections": [
+    {
+      "id": "I",
+      "title": "Introduction",
+      "purpose": "Clinical need → gap in prior hierarchical models → proposed solution",
+      "length_signal": "~2 columns, 5-6 paragraphs",
+      "subsections": [
+        {
+          "id": "I.para1",
+          "role": "Clinical motivation",
+          "verbatim_key_claims": [
+            "Multi-label classification for diagnosing wide range from CXR is important",
+            "Complex and overlapping thoracic diseases: capturing label dependencies improves diagnostic reliability",
+            "Lung pathologies: leading cause of morbidity/mortality globally [1]",
+            "Diagnostic variability due to experience/expertise differences",
+            "Long working hours impair concentration, increase diagnostic errors [2]",
+            "Global shortage of radiologists, especially in low-resource settings [3]"
+          ],
+          "citation_keys": ["dattani2023causes", "kasalak2023workoverload", "bruls2020workload"]
+        },
+        {
+          "id": "I.para2",
+          "role": "Gap in prior work",
+          "verbatim_key_claims": [
+            "Many DL approaches struggle to incorporate clinical hierarchies effectively",
+            "Hierarchical classification models do not sufficiently leverage clinical insights through penalties or parent-child relationships",
+            "This limits both interpretability and performance"
+          ]
+        },
+        {
+          "id": "I.para3",
+          "role": "Proposed solution",
+          "verbatim_key_claims": [
+            "Hierarchical multi-label classification framework organizing labels into parent-child relationships",
+            "Novel HBCE loss: applies penalties when child predicted positive without corresponding parent positive",
+            "Two penalty strategies: fixed penalty (constant β) and data-driven penalty (empirical co-occurrence ratio)"
+          ]
+        },
+        {
+          "id": "I.para4",
+          "role": "Clinical framing of the objective",
+          "verbatim_key_claims": [
+            "Primary objective: improve clinical interpretability via hierarchical groupings that mirror clinical decision-making",
+            "In clinical practice: most dangerous/life-threatening diagnoses ruled out first, then less severe",
+            "CXR reviewed by NON-radiology trained professionals in inpatient settings — interpretability critical",
+            "Custom hierarchical loss improves model performance and explainability"
+          ],
+          "writing_note": "This paragraph explicitly states the clinical workflow motivation for a hierarchy — rule out dangerous before workup for mild. Use same framing in our intro: 'model should preferentially commit to a broad safe prediction when uncertain, rather than asserting a specific wrong diagnosis.'"
+        },
+        {
+          "id": "I.para5",
+          "role": "Results + contributions summary",
+          "verbatim_key_claims": [
+            "Weighted AUROC 0.9034 on CheXpert test set, single-model single-run",
+            "Data-driven penalties show potential to improve predictive accuracy",
+            "Visual explanations and uncertainty estimations enhance interpretability and transparency",
+            "All code, model configurations, experiment details publicly available"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "II",
+      "title": "Related Work",
+      "purpose": "Survey multi-label CXR methods and hierarchical learning methods; each subsection ends leading toward the gap",
+      "length_signal": "~3 columns (unusually long for 9-page paper), 2 subsections",
+      "subsections": [
+        {
+          "id": "II.A",
+          "title": "Multi-Label Classification in Medical Imaging",
+          "key_papers_cited": [
+            {"ref": "[9] Wang et al.", "name": "CXR×MLAGCPL", "method": "Local + global label co-occurrence module", "auroc": "0.810 (5 CheXpert)"},
+            {"ref": "[10] Zhang et al.", "name": "LCFL", "method": "Self-attention label correlation + contrastive learning", "auroc": "0.764 (CheXpert, U-zeros)"},
+            {"ref": "[11] Lu et al.", "name": "CvTGNet", "method": "CNN-Transformer + GCN for label dependencies", "auroc": "0.840 (all 14 CheXpert)"},
+            {"ref": "[12] Liu et al.", "name": "MLLGL", "method": "Clinical curriculum learning (common to rare)", "auroc": "0.889 (5 labels), 0.841 (13 labels)"},
+            {"ref": "[13] Chen et al.", "name": "SSGE", "method": "Teacher-student + semantic similarity graph", "auroc": "0.836 (CheXpert, U-zeros)"},
+            {"ref": "[14] Ke et al.", "name": "CheXtransfer", "method": "Benchmark of 16 CNN architectures on CheXpert"},
+            {"ref": "[15] Huang et al.", "name": "Transfer learning study", "method": "Fine-tuning, layer transfer, combined transfer on CXR"}
+          ],
+          "summary_sentence": "Recent methods shift toward hybrid architectures, semantic embedding, and curriculum learning — but all treat label dependencies as co-occurrence or learned structure, NOT as clinical IS-A relationships with enforced penalty.",
+          "writing_note": "Asadi surveys 6+ non-hierarchical papers. All of them achieve higher than 0.800 on CheXpert. The survey shows familiarity with the field, not just the hierarchical subset. Include non-hierarchical baselines in our Related Work too."
+        },
+        {
+          "id": "II.B",
+          "title": "Hierarchical Learning in Medical Imaging",
+          "key_papers_cited": [
+            {"ref": "[17] Wehrmann et al. 2018", "name": "HMCN", "method": "Hierarchical multi-label classification networks — first explicit hierarchy in DNN for multi-label"},
+            {"ref": "[18] Chen et al. 2020", "name": "HMLC", "method": "Two-stage: conditional probs within hierarchy (sibling), then finetuned unconditional; PLCO+PadChest; AUROC 0.887 on PLCO"},
+            {"ref": "[19] Pham et al. 2021", "name": "CT+LSR", "method": "Conditional training (parent-positive subset) + label smoothing; CheXpert; AUROC 0.884 single model, 0.940 ensemble"}
+          ],
+          "gap_statement": "HMCNs and related approaches incorporate hierarchy at TRAINING TIME (data selection, conditional objectives). This study opts for a SINGLE-RUN training pipeline with a PENALTY-BASED LOSS that enforces consistency without multi-stage training.",
+          "writing_note": "Table III (at the end of the paper) shows the comparison table. Pham et al. [19] is the strongest baseline: 0.884 single model. Our paper (0.892) is only marginally better — the value is in the clinical interpretability and single-run simplicity."
+        }
+      ]
+    },
+    {
+      "id": "III",
+      "title": "Methodology",
+      "purpose": "Full reproducible description; 7 subsections covering novelty, dataset, hierarchy, architecture, loss, training, UQ, visualization",
+      "subsections": [
+        {
+          "id": "III.A",
+          "title": "Novelty and Divergence from Prior Work",
+          "verbatim_key_claims": [
+            "Emphasizes clinical interpretability and explainability while maintaining strong performance",
+            "Penalty-based loss enforces consistency between child and parent labels — addresses clinically implausible predictions",
+            "Not commonly seen in traditional dependency models (co-occurrence, GCN)",
+            "Hierarchical models use multi-stage training; this study opts for SINGLE-RUN pipeline",
+            "Simplifies process, reduces computational complexity (but may limit nuanced hierarchical learning)"
+          ],
+          "writing_note": "This is a rare explicit 'Novelty' subsection. It pre-empts reviewer confusion. Use when: (a) nearest prior work appears to solve the same problem, (b) the difference is subtle (single-run vs. multi-stage is easy to miss). Our paper should consider this."
+        },
+        {
+          "id": "III.B",
+          "title": "Dataset and Labeling Strategy",
+          "verbatim_key_claims": [
+            "CheXpert dataset: 224K+ CXRs from 65K+ patients",
+            "Labels: VisualCheXbert-derived (NOT standard CheXpert or CheXbert labelers — different tool)",
+            "Splits: Train=223,414 / Validation=234 / Test=668",
+            "Directly using CheXpert labels poses limitations due to interdependence of pathologies",
+            "Introduced new parent categories based on clinical insights (e.g., 'Fluid Accumulation' for Pleural Effusion + Pneumonia + Edema + Consolidation)",
+            "Added 'Uncertain' label: instances with neither positive findings nor 'No Finding' → captures clinical uncertainty"
+          ],
+          "subsections": [
+            {
+              "id": "III.B.1",
+              "title": "Clinical Relevance of the Groupings",
+              "hierarchy_structure": {
+                "root": "Input CXR",
+                "level1": ["Uncertain", "No Finding", "Abnormal"],
+                "under_Abnormal": ["Other", "Cardiac", "Opacity"],
+                "under_Other": ["Fracture", "Support Devices"],
+                "under_Cardiac": ["Enlarged Cardiomediastinum", "Cardiomegaly"],
+                "under_Opacity": ["Lung Opacity", "Lung Lesion", "Fluid Accumulation", "Missing Lung Tissue"],
+                "under_Fluid_Accumulation": ["Edema", "Pleural Effusion", "Consolidation → Pneumonia"],
+                "under_Missing_Lung_Tissue": ["Pleural Other", "Atelectasis", "Pneumothorax"]
+              },
+              "rationale_bullets": [
+                "Grouping Related Conditions: enlarged cardiac silhouette → primary cardiac dx; gravity-dependent opacifications → fluid infiltration spectrum",
+                "Parent-Child Dependencies: consolidations could precede pneumonia — hierarchy captures this clinically",
+                "Improved Interpretability: broad dx first (lung opacity vs. cardiac), then specific child (Cardiomegaly under Cardiac) — mirrors clinical workflow",
+                "Capturing Clinical Uncertainty: Uncertain category → model can acknowledge ambiguous cases, may indicate CT needed"
+              ],
+              "informed_by": ["Chen et al. [18]", "Smithuis 2014 Radiology Assistant [31]", "clinical feedback from co-author Ian J. Gerard (McGill radiation oncology)"]
+            }
+          ],
+          "writing_note": "Their hierarchy has a ROOT node ('Abnormal') with intermediate parent nodes (e.g., 'Fluid Accumulation') that are NOT in the original CheXpert labels — these are INVENTED PARENT LABELS. Our project uses Indonesian clinical guidelines (PDPI/PNPK/KKI) as authority for IS-A edges, which is different."
+        },
+        {
+          "id": "III.C",
+          "title": "Model Architecture",
+          "verbatim_key_claims": [
+            "DenseNet121 [7] as base: widespread in medical imaging, dense connectivity, vanishing gradient mitigation, feature reuse",
+            "Model initialized with RANDOM WEIGHTS and trained FROM SCRATCH (NOT ImageNet or CXR pretrained)",
+            "Rationale for scratch: 'domain-specific nature of CXR images often benefits from task-specific training [23]'",
+            "Image size: 320×320 (higher resolution than standard 224×224)"
+          ],
+          "architecture_layers": [
+            "DenseNet121 backbone (random init)",
+            "Conv2D: 512 filters (after backbone, to enhance fine feature extraction for hierarchy)",
+            "Batch Normalization (stabilize + accelerate training)",
+            "Global Average Pooling (reduces overfitting vs. FC layer, maintains spatial features)",
+            "Dense: 128 neurons + ReLU (nonlinearity, complex feature interactions)",
+            "Dropout: p=0.5 (prevent overfitting; also reused at inference for MC-Dropout)",
+            "Dense: N_labels neurons + sigmoid (multi-label output probabilities)"
+          ],
+          "citation_keys": ["huang2017densenet", "raghu2019transfusion"],
+          "writing_note": "CRITICAL DIFFERENCE FROM OUR PAPER: Asadi trains from scratch. We use TorchXRayVision pretrained weights (densenet121-res224-all). This is a major architectural choice to highlight in our Related Work or Methods. Also: their dropout is p=0.5, ours is p=0.2 — affects MC-Dropout uncertainty calibration."
+        },
+        {
+          "id": "III.D",
+          "title": "Clinically-Inspired Hierarchical Loss Function",
+          "purpose": "Define BCE base → add indicator-based penalty → explain fixed vs. data-driven modes",
+          "subsections": [
+            {
+              "id": "III.D.1",
+              "title": "Binary Cross-Entropy (base)",
+              "equation": "L_BCE(ytrue, ypred) = -(1/B) Σ_b Σ_l [y_true^(b,l) log(y_pred^(b,l)) + (1-y_true^(b,l)) log(1-y_pred^(b,l))]   [Eq.1]",
+              "note": "Standard BCE over all labels, no masking mentioned explicitly for not-applicable labels"
+            },
+            {
+              "id": "III.D.2",
+              "title": "Hierarchical Penalty (hard indicator)",
+              "equation": "P_{p,c} = Penalty(p,c) · 1{ypred_p < 0.5  AND  ypred_c > 0.5}   [Eq.2]",
+              "meaning": "Penalty fires when child is predicted confident-positive (>0.5) but parent is predicted confident-negative (<0.5). HARD THRESHOLD — not differentiable at 0.5.",
+              "critical_difference_from_our_paper": "Our methods draft uses ReLU(p_c - 0.5) * ReLU(0.5 - p_g) — this is the DIFFERENTIABLE APPROXIMATION of Asadi's indicator. Both penalize the same inconsistency but ours provides gradient information everywhere."
+            },
+            {
+              "id": "III.D.3",
+              "title": "Fixed vs. Data-Driven Penalties",
+              "fixed": {
+                "formula": "Penalty(p,c) = β   [Eq.3]",
+                "note": "Constant for all parent-child pairs; β=1 used in experiments",
+                "properties": "Computationally simple; not adaptive to actual label co-occurrence rates"
+              },
+              "data_driven": {
+                "formula": "Penalty(p,c) = (N_{parent_p=0, child_c=1} + ε) / (N_{parent_p=0} + 2ε)   [Eq.4]",
+                "meaning": "Empirical probability that child=1 given parent=0 in training set; Laplace-smoothed with ε",
+                "correlation_range": "Asadi found parent-child correlation ranges from 0.814 to 0.999",
+                "winner": "Data-driven at λ=0.5 achieves highest AUROC — selected as final method"
+              },
+              "total_loss": {
+                "formula": "L_HBCE = L_BCE + λ Σ_{p,c} P_{p,c}   [Eq.5]",
+                "lambda_selected": 0.5,
+                "note": "λ controls penalty strength relative to BCE; swept over 0.3, 0.5, 0.7, 1.0 in experiments"
+              }
+            }
+          ]
+        },
+        {
+          "id": "III.E",
+          "title": "Training Strategy",
+          "verbatim_details": {
+            "optimizer": "Adam, initial LR=0.0001",
+            "lr_schedule": "ReduceLROnPlateau: factor 0.9 when validation loss plateaus",
+            "early_stopping": "Patience=3 consecutive epochs without val loss decrease",
+            "checkpointing": "Save when either val loss decreased OR AUROC increased",
+            "image_size": "320×320",
+            "batch_size": 16,
+            "data_splits": {"train": 223414, "validation": 234, "test": 668},
+            "augmentation": ["horizontal flip", "vertical flip", "random brightness delta=0.1", "random contrast [0.9, 1.1]"],
+            "augmentation_note": "Seed fixed for batch reproducibility but augmentations allowed to vary",
+            "no_horizontal_flip_note": "THEY DO USE horizontal flip (unlike our project which disables it for situs inversus reason)"
+          },
+          "writing_note": "Our project disables horizontal flip because it mirrors cardiac silhouette (situs inversus issue). Asadi does NOT make this distinction — they flip horizontally. This is a methodological difference worth noting."
+        },
+        {
+          "id": "III.F",
+          "title": "Monte Carlo Uncertainty Estimation",
+          "verbatim_key_claims": [
+            "MC-Dropout during inference: multiple forward passes with active dropout",
+            "Yields distribution of predictions",
+            "Compute mean and standard deviation for each label",
+            "Mean = predictive confidence; Std = uncertainty measure",
+            "N=10 Monte Carlo iterations (confirmed in Fig 3 caption)",
+            "Provides clinicians information on reliability of model results"
+          ],
+          "critical_difference_from_our_paper": "Asadi uses N=10 passes; our project uses T=30. More passes = better approximation but slower inference. Also: Asadi's dropout p=0.5 means more variance per pass; ours p=0.2 means less noise."
+        },
+        {
+          "id": "III.G",
+          "title": "Class Activation Maps",
+          "verbatim_key_claims": [
+            "Grad-CAM [8] on final convolutional layer",
+            "Heatmaps indicate regions most strongly influencing predictions",
+            "Backpropagate gradients of target class through final conv layer",
+            "Activations normalized and clipped at 0.5 threshold (retain most prominent regions only)",
+            "Discretized colormap: enhances contrast between high (black=1) and low (white=0) activation",
+            "Allows clinicians to verify model attention aligns with auscultation findings (lungs, heart)"
+          ],
+          "citation_keys": ["selvaraju2017gradcam"]
+        }
+      ]
+    },
+    {
+      "id": "IV",
+      "title": "Results",
+      "purpose": "Uncertain label ablation → penalty ablation (fixed vs. data-driven, scale factors) → overall performance → visualization",
+      "subsections": [
+        {
+          "id": "IV.A",
+          "title": "Uncertain Label",
+          "verbatim_key_claims": [
+            "Compared 14-label (without Uncertain) vs 15-label (with Uncertain) models",
+            "Mean AUROC: 0.890 (without) vs 0.892 (with) on all 14 pathology labels",
+            "Paired t-test: NOT significant (5-label p=0.0976; 14-label p=0.2076)",
+            "Conclusion: Uncertain label marginally better AUROC, may hold CLINICAL importance for ambiguous cases",
+            "Flat training WITH Uncertain achieves highest 5-label mean: 0.899"
+          ],
+          "note": "Interesting: the flat model WITH Uncertain (0.899) actually outperforms the hierarchical models (0.892) on the 5 standard CheXpert labels. Hierarchy hurts slightly on the standard benchmark but improves interpretability."
+        },
+        {
+          "id": "IV.B",
+          "title": "Penalty",
+          "verbatim_key_claims": [
+            "Experiments: 1 hierarchy × 2 penalty types × 4 scale factors (0.3, 0.5, 0.7, 1.0)",
+            "Parent-child correlations range 0.814 to 0.999 → used fixed β=1 for fair comparison",
+            "Data-driven significantly better for Missing Lung Tissue, Opacity (high-level; p=0.0351, 0.0003)",
+            "Data-driven significantly better for Atelectasis, Edema, Lung Opacity (low-level; p=0.0038, 0.0225, 0.0001)",
+            "Data-driven λ=0.5: highest mean AUROC 0.903, best Abnormal (0.942), Fluid Accumulation (0.922), Other (0.903)"
+          ],
+          "table_I_summary": "5-label comparison: flat+Uncertain (0.899) > data-driven 0.5 (0.892) > fixed 0.3 (0.888). Hierarchical models DO NOT beat flat on standard 5-label benchmark.",
+          "table_II_summary": "High-level categories: data-driven 0.5 wins overall (0.904 mean). Fixed 0.3 wins on Cardiac (0.862) and Other (0.900)."
+        },
+        {
+          "id": "IV.C",
+          "title": "Overall Model Performance",
+          "verbatim_key_claims": [
+            "Mean AUROC 0.903 on all hierarchy labels",
+            "Mean AUROC 0.904 on high-level categories (Table II)",
+            "Mean AUROC 0.892 on 5 standard CheXpert labels (Table III)",
+            "Table III comparison: marginally better than Zhang et al. [10] (p=0.0598); no significant difference between all methods"
+          ],
+          "comparison_to_sota": {
+            "Wang2024_CXRxMLAGCPL": 0.810,
+            "Zhang2024_LCFL": 0.784,
+            "Lu2024_CvTGNet": 0.832,
+            "Liu2023_MLLGL": 0.889,
+            "Chen2022_SSGE": 0.844,
+            "Irvin2019_CheXpert_baseline": 0.889,
+            "Pham2021_CT+LSR_U-zeros": 0.884,
+            "Asadi2025_ours": 0.892
+          },
+          "honest_assessment": "Asadi's hierarchical model (0.892) only marginally outperforms flat Irvin baseline (0.889) and Liu MLLGL (0.889) on the 5-label benchmark. The contribution is primarily in interpretability and single-run simplicity, not raw AUROC."
+        },
+        {
+          "id": "IV.D",
+          "title": "Visualization",
+          "verbatim_key_claims": [
+            "Grad-CAMs shown for one sample image with activations for all hierarchy labels",
+            "Activations clipped at 0.5 threshold; segmented colormap for clarity",
+            "Fluid Accumulation: high activation over potential fluid-affected areas (consistent with Pleural Effusion, Edema)",
+            "Cardiomegaly, Lung Opacity, Enlarged Cardiomediastinum: targeted focus in heart region",
+            "MC-Dropout uncertainty shown per label: prediction ± std (N=10)"
+          ],
+          "figure_3_details": {
+            "rows": "Top: high-level + Uncertain; Middle: original CheXpert labels; Bottom: child labels",
+            "ground_truth": "Atelectasis, Cardiomegaly, Edema, Enlarged Cardiomegaly, Lung Opacity, Pleural Effusion",
+            "colormap": "black=1 (high attention), white=0 (minimal focus)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "V",
+      "title": "Discussion",
+      "verbatim_key_claims": [
+        "Hierarchical structure: key strength for interpretability (aligns label dependencies with medical expertise)",
+        "Custom HBCE loss: ensures logical consistency between predictions",
+        "Single-run pipeline: simplifies deployment, reduces computational overhead",
+        "CAMs + MC-Dropout: transparency for clinicians",
+        "Comparison to prior work (Table III): highest AUROC for Atelectasis (0.879) and Pleural Effusion (0.945); mean AUROC 0.892 similar to SOTA",
+        "Marginally better than Zhang et al. [10] (p=0.0598); NO significant difference between all methods"
+      ],
+      "limitations_stated": [
+        "Batch size affects model: smaller batches improve generalization but noisier gradients",
+        "Model's reliance on specific label structure reduces generalizability across datasets"
+      ],
+      "writing_note": "Asadi is honest: 'no significant difference found between all these methods.' The claim is clinical value, not SOTA AUROC. Our paper should position similarly: AUROC competitiveness + novel inference-time mechanism + uncertainty characterization as contribution."
+    },
+    {
+      "id": "VI",
+      "title": "Conclusion",
+      "verbatim_key_claims": [
+        "Enhanced interpretability and clinical relevance via hierarchical label structure + custom loss",
+        "Organized pathologies into clinically meaningful categories reflecting clinical decision-making",
+        "HBCE loss: flexible fixed and data-driven penalty schemes; data-driven improves AUROC",
+        "Weighted AUROC 0.9034 on CheXpert (full hierarchy); single-model, single-run",
+        "CAM + MC-Dropout: model decision-making transparency and confidence measures",
+        "Bridges gap between automated classification and clinical application"
+      ],
+      "future_work": [
+        "Adaptive batch size strategies (combine small-batch generalization + large-batch stability)",
+        "Domain adaptation approach: dynamically align hierarchy to target dataset",
+        "Evaluate in simulated clinical scenarios (OSCEs)"
+      ]
+    }
+  ],
+  "structural_lessons": [
+    "Explicit §III.A 'Novelty and Divergence' subsection is effective when gap vs. prior is subtle. State the distinction in one sentence: 'multi-stage training (prior) vs. single-run penalty-loss (ours).'",
+    "§II.A surveys ~6 non-hierarchical papers before §II.B surveys hierarchical. Pattern: show breadth, then depth. Cite performance numbers (AUROC) for every surveyed paper.",
+    "Results section ablates in dependency order: Uncertain label first (baseline setup), then Penalty (core contribution). Each ablation references specific Tables.",
+    "Discussion is honest about statistical significance: 'no significant difference between methods.' Frame contribution as interpretability, not raw accuracy.",
+    "Table III comparison: only 2 methods marked * (hierarchical) — Pham et al. and Ours. Signals that hierarchical is the relevant comparison class.",
+    "Figure 3 shows CAM for ALL labels simultaneously on one image — qualitative evidence of per-label spatial attention. This is a common and effective visualization for multi-label CXR papers."
+  ],
+  "differentiation_from_our_paper": {
+    "penalty_formula": {
+      "asadi": "Hard indicator: P_{p,c} = β · 1{p_child > 0.5 AND p_parent < 0.5}  (non-differentiable at threshold)",
+      "ours": "Smooth ReLU product: penalty(g,c) = ReLU(p_c - 0.5) * ReLU(0.5 - p_g)  (differentiable everywhere)",
+      "implication": "Our formulation provides gradient signal even for predictions close to 0.5; Asadi's formula gives zero gradient in the transition zone"
+    },
+    "backbone": {
+      "asadi": "DenseNet121 from RANDOM INIT (no pretraining)",
+      "ours": "DenseNet121 from TorchXRayVision pretrained weights (densenet121-res224-all, trained on 6 CXR datasets)"
+    },
+    "dataset": {
+      "asadi": "CheXpert only (224K), VisualCheXbert labels",
+      "ours": "6 datasets pooled (NIH/CheXpert/VinDr-CXR/VinDr-PCXR/TBX11K/COVIDx), 417K studies"
+    },
+    "label_authority": {
+      "asadi": "Custom clinician-defined hierarchy (parent nodes invented for the paper, validated by clinician co-author)",
+      "ours": "Indonesian PDPI/PNPK/KKI clinical guidelines (external authority, 51 canonical labels)"
+    },
+    "inference_mechanism": {
+      "asadi": "No inference-time fallback. Predictions are raw sigmoid outputs. Uncertainty only shown qualitatively via Grad-CAM + MC-Dropout std.",
+      "ours": "Inference-time gate: if sigma_c > tau_u (uncertain), suppress child prediction, fall back to parent or abstain."
+    },
+    "mc_dropout": {
+      "asadi": "N=10 passes, dropout p=0.5",
+      "ours": "T=30 passes, dropout p=0.2"
+    },
+    "horizontal_flip": {
+      "asadi": "Used in augmentation",
+      "ours": "Disabled — mirrors cardiac silhouette (situs inversus)"
+    },
+    "suggested_cite_sentence": "Asadi et al. (2025) propose a hierarchical BCE loss with a penalty term that fires when a child label is predicted positive while its parent is negative. Unlike their hard-threshold indicator, our formulation uses a differentiable ReLU approximation to enable gradient-based optimization throughout. Moreover, while Asadi et al. apply hierarchical structure only at training time, we extend the hierarchy to inference by using MC-Dropout variance as a gate that falls back to a coarser parent prediction when per-label uncertainty exceeds a threshold."
+  }
+}

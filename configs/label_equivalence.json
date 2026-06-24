@@ -1,0 +1,62 @@
+{
+  "_comment": "Operational map: official clinical-authority canonical disease -> {synonyms (lowercase clinical variants), datasets (raw column name, or list when several raw columns merge into one canonical; omitted = that dataset does not annotate this disease)}. Canonical set = context/research-cxr_canonical-diseases-2606.md (51 diseases). Public datasets annotate radiographic FINDINGS, so only ~14 diseases receive any dataset signal; the rest are authority-defined but currently untrainable (always NaN/masked). Mapping is intentionally lossy: findings with no clear clinical-diagnosis home are not mapped.",
+  "canonical": {
+    "Pneumonia": {"synonyms": ["pneumonia", "lobar pneumonia", "bronchopneumonia", "community acquired pneumonia", "cap"], "datasets": {"mimic-cxr": "Pneumonia", "chexpert": "Pneumonia", "nih-cxr14": "Pneumonia", "vindr-pcxr": ["Brocho-pneumonia", "Pneumonia", "Pleuro-pneumonia"]}},
+    "Tuberculosis": {"synonyms": ["tuberculosis", "tb", "pulmonary tuberculosis", "tb paru"], "datasets": {"tbx11k": "folder:tb", "vindr-pcxr": "Tuberculosis"}},
+    "NTM_Infection": {"synonyms": ["nontuberculous mycobacteria", "ntm", "mott", "atypical mycobacteria"], "datasets": {}},
+    "Lung_Abscess": {"synonyms": ["lung abscess", "pulmonary abscess", "abses paru"], "datasets": {}},
+    "Pleural_Empyema": {"synonyms": ["empyema", "pleural empyema", "empiema"], "datasets": {}},
+    "Pulmonary_Mycosis": {"synonyms": ["pulmonary mycosis", "fungal lung infection", "aspergillosis", "aspergilloma", "mikosis paru"], "datasets": {}},
+    "Melioidosis": {"synonyms": ["melioidosis", "burkholderia pseudomallei"], "datasets": {}},
+    "Bronchiolitis": {"synonyms": ["bronchiolitis", "bronkiolitis"], "datasets": {"vindr-pcxr": "Bronchiolitis"}},
+    "Mediastinitis": {"synonyms": ["mediastinitis"], "datasets": {}},
+    "Acute_Bronchitis": {"synonyms": ["acute bronchitis", "bronkitis akut"], "datasets": {"vindr-pcxr": "Bronchitis"}},
+    "COVID19_Pneumonia": {"synonyms": ["covid-19 pneumonia", "covid pneumonia", "sars-cov-2 pneumonia", "covid"], "datasets": {"covidx-cxr4": "class:positive"}},
+    "Aspiration_Pneumonia": {"synonyms": ["aspiration pneumonia", "pneumonia aspirasi"], "datasets": {}},
+    "Other_Viral_Pneumonia": {"synonyms": ["viral pneumonia", "sars", "avian influenza", "mers", "influenza pneumonia"], "datasets": {}},
+
+    "COPD": {"synonyms": ["copd", "chronic obstructive pulmonary disease", "ppok", "emphysema", "hyperinflation"], "datasets": {"nih-cxr14": "Emphysema"}},
+    "Asthma": {"synonyms": ["asthma", "asma", "asma bronkial"], "datasets": {}},
+    "Bronchiectasis": {"synonyms": ["bronchiectasis", "bronkiektasis"], "datasets": {}},
+    "Post_TB_Obstructive_Syndrome": {"synonyms": ["post-tb obstructive syndrome", "sopt", "post tuberculosis obstruction"], "datasets": {}},
+    "ACOS": {"synonyms": ["acos", "asthma-copd overlap syndrome", "asthma copd overlap"], "datasets": {}},
+
+    "Pleural_Effusion": {"synonyms": ["pleural effusion", "effusion", "hydrothorax", "pleural fluid", "efusi pleura"], "datasets": {"mimic-cxr": "Pleural Effusion", "chexpert": "Pleural Effusion", "nih-cxr14": "Effusion", "vindr-cxr": "Pleural effusion"}},
+    "Pneumothorax": {"synonyms": ["pneumothorax", "collapsed lung", "ptx", "pneumotoraks"], "datasets": {"mimic-cxr": "Pneumothorax", "chexpert": "Pneumothorax", "nih-cxr14": "Pneumothorax", "vindr-cxr": "Pneumothorax"}},
+    "Hemothorax": {"synonyms": ["hemothorax", "haemothorax", "hemotoraks"], "datasets": {}},
+    "Hydropneumothorax": {"synonyms": ["hydropneumothorax", "hidropneumotoraks", "air-fluid level pleural"], "datasets": {}},
+    "Pneumomediastinum": {"synonyms": ["pneumomediastinum", "mediastinal emphysema"], "datasets": {}},
+
+    "Lung_Cancer": {"synonyms": ["lung cancer", "kanker paru", "primary lung carcinoma", "bronchogenic carcinoma", "lung tumor", "lung tumour"], "datasets": {"vindr-pcxr": "Lung tumor"}},
+    "Benign_Lung_Tumor": {"synonyms": ["benign lung tumor", "hamartoma", "carcinoid", "tumor jinak paru"], "datasets": {}},
+    "Pulmonary_Metastases": {"synonyms": ["pulmonary metastases", "metastasis", "cannonball metastases", "metastasis paru"], "datasets": {}},
+    "Mediastinal_Tumor": {"synonyms": ["mediastinal tumor", "mediastinal mass", "thymoma", "tumor mediastinum"], "datasets": {"vindr-pcxr": "Mediastinal tumor"}},
+    "Mesothelioma": {"synonyms": ["mesothelioma", "mesotelioma"], "datasets": {}},
+    "Pleural_Malignancy": {"synonyms": ["pleural malignancy", "malignant pleural", "keganasan pleura"], "datasets": {}},
+    "Chest_Wall_Tumor": {"synonyms": ["chest wall tumor", "tumor dinding dada"], "datasets": {}},
+    "Solitary_Pulmonary_Nodule": {"synonyms": ["solitary pulmonary nodule", "spn", "nodule", "mass", "lung nodule", "lung mass", "lung lesion", "pulmonary nodule", "nodul paru soliter"], "datasets": {"mimic-cxr": "Lung Lesion", "chexpert": "Lung Lesion", "nih-cxr14": ["Mass", "Nodule"], "vindr-cxr": "Nodule/Mass"}},
+
+    "ILD": {"synonyms": ["interstitial lung disease", "ild", "ppi", "interstitial pattern", "pulmonary fibrosis", "fibrosis", "fibrotic changes"], "datasets": {"nih-cxr14": "Fibrosis", "vindr-cxr": ["ILD", "Pulmonary fibrosis"]}},
+    "IPF": {"synonyms": ["idiopathic pulmonary fibrosis", "ipf", "fpi", "usual interstitial pneumonia"], "datasets": {}},
+    "Sarcoidosis": {"synonyms": ["sarcoidosis", "sarkoidosis", "bilateral hilar adenopathy"], "datasets": {}},
+    "COP": {"synonyms": ["cryptogenic organizing pneumonia", "cop", "organizing pneumonia"], "datasets": {}},
+    "Hypersensitivity_Pneumonitis": {"synonyms": ["hypersensitivity pneumonitis", "pneumonitis hipersensitivitas", "extrinsic allergic alveolitis"], "datasets": {}},
+    "Silicosis": {"synonyms": ["silicosis", "silikosis"], "datasets": {}},
+    "Asbestosis": {"synonyms": ["asbestosis"], "datasets": {}},
+    "Other_Pneumoconiosis": {"synonyms": ["pneumoconiosis", "coal workers pneumoconiosis", "berylliosis", "byssinosis", "siderosis", "antrakosis"], "datasets": {}},
+
+    "Pulmonary_Edema": {"synonyms": ["pulmonary edema", "edema", "edema paru", "interstitial edema", "bat wing opacity", "fluid overload"], "datasets": {"mimic-cxr": "Edema", "chexpert": "Edema", "nih-cxr14": "Edema"}},
+    "ARDS": {"synonyms": ["ards", "acute respiratory distress syndrome", "ali", "acute lung injury"], "datasets": {}},
+    "Pulmonary_Embolism": {"synonyms": ["pulmonary embolism", "pe", "emboli paru", "pulmonary infarction", "hampton hump"], "datasets": {}},
+    "Pulmonary_Hypertension": {"synonyms": ["pulmonary hypertension", "ph", "hipertensi pulmonal", "enlarged pulmonary artery", "enlarged pa", "prominent pa"], "datasets": {}},
+    "Cor_Pulmonale": {"synonyms": ["cor pulmonale", "kor pulmonal", "right ventricular enlargement"], "datasets": {}},
+    "Cardiomegaly": {"synonyms": ["cardiomegaly", "enlarged heart", "cardiac enlargement", "kardiomegali", "heart failure", "cardiothoracic ratio"], "datasets": {"mimic-cxr": "Cardiomegaly", "chexpert": "Cardiomegaly", "nih-cxr14": "Cardiomegaly", "vindr-cxr": "Cardiomegaly"}},
+
+    "Chest_Trauma": {"synonyms": ["chest trauma", "trauma toraks", "rib fracture", "clavicle fracture", "fracture", "fraktur kosta", "lung contusion"], "datasets": {"mimic-cxr": "Fracture", "chexpert": "Fracture"}},
+    "Subcutaneous_Emphysema": {"synonyms": ["subcutaneous emphysema", "emfisema subkutis"], "datasets": {}},
+    "Diaphragmatic_Hernia": {"synonyms": ["diaphragmatic hernia", "hernia", "hiatal hernia", "hernia diafragmatika"], "datasets": {"nih-cxr14": "Hernia", "vindr-pcxr": "Diagphramatic hernia"}},
+    "Chest_Wall_Abnormality": {"synonyms": ["chest wall abnormality", "scoliosis", "kyphoscoliosis", "pectus", "skeletal abnormality", "kelainan dinding dada"], "datasets": {}},
+    "Airway_Foreign_Body": {"synonyms": ["airway foreign body", "foreign body", "benda asing"], "datasets": {}},
+    "Atelectasis": {"synonyms": ["atelectasis", "collapse", "lung collapse", "volume loss", "atelektasis", "subsegmental atelectasis"], "datasets": {"mimic-cxr": "Atelectasis", "chexpert": "Atelectasis", "nih-cxr14": "Atelectasis", "vindr-cxr": "Atelectasis"}}
+  }
+}

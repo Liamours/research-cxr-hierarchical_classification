@@ -1,0 +1,60 @@
+﻿experiment:
+  name: flat_densenet_combined
+  seed: 42
+  notes: Baseline DenseNet121 on combined 6-dataset canonical 51-label CSV.
+
+data:
+  dataset: combined
+  label_csv: E:/research-cxr/dataset/combined/combined.csv
+  image_root: /   # unused â€” combined CSV has absolute image_path per row
+  image_size: 224
+  batch_size: 32
+  num_workers: 4
+
+aug:
+  hflip: false
+  rotation_deg: 10.0
+  translate: 0.05
+  scale_jitter: 0.05
+  brightness: 0.1
+  contrast: 0.1
+
+model:
+  backbone: densenet121_xrv
+  pretrained: true
+  dropout: 0.2
+
+seg:
+  enabled: false
+
+uq:
+  method: none
+
+training:
+  epochs: 20
+  grad_accum_steps: 4
+  head_lr: 0.0001
+  backbone_lr: 0.00001
+  weight_decay: 0.01
+  warmup_steps: 2000
+  max_grad_norm: 1.0
+  bf16: true
+  early_stop_patience: 5
+  freeze_backbone_epochs: 2
+
+eval:
+  metrics: [auroc, f1, ece]
+  reliability_bins: 15
+  threshold: 0.5
+
+xai:
+  target_layer: auto
+  overlay_alpha: 0.5
+
+paths:
+  result_root: result
+
+logging:
+  level: info
+  val_display_rows: 5
+

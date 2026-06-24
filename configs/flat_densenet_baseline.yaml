@@ -1,0 +1,59 @@
+﻿experiment:
+  name: flat_densenet_baseline
+  seed: 42
+  notes: Phase 1 flat multi-label baseline, DenseNet121 (torchxrayvision), MIMIC-CXR.
+
+data:
+  dataset: mimic-cxr
+  label_csv: data/preprocessed/labels/mimic-cxr.csv
+  image_root: data/preprocessed/images
+  image_size: 224
+  batch_size: 16
+  num_workers: 4
+
+aug:
+  hflip: false        # laterality: hflip mirrors heart/aorta (situs inversus); off by default
+  rotation_deg: 10.0
+  translate: 0.05
+  scale_jitter: 0.05
+  brightness: 0.1
+  contrast: 0.1
+
+model:
+  backbone: densenet121_xrv
+  pretrained: true
+  dropout: 0.2
+
+seg:
+  enabled: false
+
+uq:
+  method: none
+
+training:
+  epochs: 15
+  grad_accum_steps: 2
+  head_lr: 0.0001
+  backbone_lr: 0.00001
+  weight_decay: 0.01
+  warmup_steps: 1000
+  max_grad_norm: 1.0
+  bf16: true
+  early_stop_patience: 3
+  freeze_backbone_epochs: 1
+
+eval:
+  metrics: [auroc, f1, ece]
+  reliability_bins: 15
+  threshold: 0.5
+
+xai:
+  target_layer: auto
+  overlay_alpha: 0.5
+
+paths:
+  result_root: result
+
+logging:
+  level: info
+  val_display_rows: 5

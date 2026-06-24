@@ -1,0 +1,74 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+
+# Datasets & large binary/data files (exclude by directory, not extension)
+# *.json and *.jsonl NOT globally excluded — reference/paper_jsons/ must be tracked
+*.csv
+*.parquet
+*.arrow
+*.jpg
+*.jpeg
+*.png
+*.dcm
+*.zip
+*.tar
+*.gz
+*.pdf
+
+# Data directory at repo root (medical images, label CSVs, preprocessed files)
+# Leading slash = root-only match; does NOT exclude src/data/
+/data/
+
+# Third-party reference repos (cloned, not owned by this project)
+external/
+
+# Model outputs
+checkpoints/
+outputs/
+runs/
+wandb/
+
+# All experiment results (checkpoints, logs, metrics, predictions)
+result/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust build artifacts
+src/nlp_cxr_rs/target/
+
+# Tooling & local context (never push)
+.claude/
+context/
+.python-version
+.coverage
+.pytest_cache/
+
+# Third-party reference repos (cloned, not ours)
+repo/
+
+# Archived prior-project (report generation) — kept local, never pushed
+attic/
+
+# Model weights
+*.pt
+*.pth
+*.safetensors
+*.bin

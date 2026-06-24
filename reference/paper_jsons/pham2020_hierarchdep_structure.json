@@ -1,0 +1,496 @@
+{
+  "meta": {
+    "key": "pham2020hierarchdep",
+    "title": "Interpreting chest X-rays via CNNs that exploit hierarchical disease dependencies and uncertainty labels",
+    "arxiv": "1911.06475v3",
+    "published_venue": "Neurocomputing, vol. 437, pp. 186-194, 2021",
+    "submitted": "June 2020 (arXiv date on preprint)",
+    "pages": 27,
+    "pages_content": "1-20 (references pp. 21-27)",
+    "format": "Neurocomputing journal (Elsevier), single-column",
+    "institution": "Medical Imaging Group, Vingroup Big Data Institute (VinBDI), 458 Minh Khai street, Hai Ba Trung, Hanoi, Vietnam",
+    "authors": ["Hieu H. Pham", "Tung T. Le", "Dat Q. Tran", "Dat T. Ngo", "Ha Q. Nguyen"],
+    "local_pdf": "reference/papers/1911.06475v3_HierarchDep_Pham2020.pdf",
+    "headline_results": {
+      "auroc_chexpert_validation_5labels": 0.940,
+      "auroc_chexpert_test_5labels": 0.930,
+      "beats_radiologists": "2.6 out of 3 on hidden test set",
+      "best_single_model": "U-Ones+CT+LSR = AUC 0.894 on validation",
+      "model_type": "Ensemble of 6 CNN architectures + TTA"
+    },
+    "relevance_to_our_paper": "Primary prior work to distinguish. Their hierarchy is at TRAINING TIME (conditional training = filter training set by parent-positive). Ours is at INFERENCE TIME (MC-Dropout variance gate). Also: their inference uses Bayes product to reconstruct unconditional probabilities; ours uses uncertainty threshold to switch prediction level."
+  },
+  "critical_corrections_vs_prior_json": [
+    "Published in Neurocomputing vol. 437, 2021 — NOT just a preprint",
+    "All 5 authors must be cited: Pham, Le, Tran, Ngo, Nguyen (VinBDI Vietnam)",
+    "14 labels are exactly enumerated in §3.1 — listed below under section 3.1",
+    "Hierarchy is the CheXpert-defined DAG from Irvin et al. [21] — NOT an invented hierarchy",
+    "Two-phase training: Phase 1 = 5 epochs on PARENT-POSITIVE subset; Phase 2 = freeze all except last FC + 5 epochs on FULL data",
+    "LR schedule: initial 1e-4, reduced by factor 10 EACH EPOCH (aggressive, not cosine annealing)",
+    "Image preprocessing: resize to 256x256 THEN template matching to find 224x224 crop — NOT just resize to 224",
+    "LSR references: Müller et al. [20] 'When does label smoothing help?' (NeurIPS 2019) AND Pereyra et al. [44]",
+    "TTA = 10 random image augmentations per test image (average outputs) — NOT Monte Carlo Dropout",
+    "Ensemble = 6 architectures: DenseNet-121/169/201, Inception-ResNet-v2, Xception, NASNetLarge",
+    "Validation set: 200 studies annotated by 3 board-certified radiologists (majority vote)",
+    "Test set: 500 studies labeled by 8 radiologists (3 as benchmark, majority of 5 = ground truth)",
+    "The Bayes product inference is the theoretical justification but after Phase 2 the model outputs are already ~unconditional — the paper notes the product is NOT applied to validation because Phase 2 uses full data"
+  ],
+  "abstract": {
+    "purpose": "~350-word journal abstract (Neurocomputing format): problem → method 1 → method 2 → dataset → result → radiologist comparison → keyword list",
+    "verbatim_key_claims": [
+      "Supervised multi-label classification framework based on deep CNNs for 14 common thoracic diseases",
+      "Train state-of-the-art CNNs that exploit HIERARCHICAL DEPENDENCIES among abnormality labels",
+      "Label smoothing technique for better handling of uncertain samples",
+      "CheXpert dataset: 200K+ CXRs",
+      "Mean AUC 0.940 predicting 5 selected pathologies (validation set) — highest AUC yet reported",
+      "On independent test set (500 studies, 5 radiologists ground truth): mean AUC 0.930",
+      "Better than 2.6 out of 3 individual radiologists on average"
+    ],
+    "keywords": ["Chest X-ray", "CheXpert", "Multi-label classification", "Uncertainty label", "Label smoothing", "Label dependency", "Hierarchical learning"],
+    "writing_note": "Journal abstract is 350+ words vs. ~150 for conference. Includes radiologist comparison as a separate sentence. Headline number in abstract is validation AUC (0.940), not test AUC (0.930) — validation is easier to optimize."
+  },
+  "sections": [
+    {
+      "id": "1",
+      "title": "Introduction",
+      "purpose": "Clinical motivation → survey of existing approaches → identify two specific gaps → contributions → road map",
+      "length_signal": "~3.5 pages (journal single-column), 6-7 paragraphs",
+      "subsections": [
+        {
+          "id": "1.para1-2",
+          "role": "Clinical need",
+          "verbatim_key_claims": [
+            "CXR: most common radiological exam for diagnosing lung and heart diseases — millions/year [1,2]",
+            "Pneumothorax [3] can be deadly if not diagnosed quickly",
+            "CAD system for most common observations from CXR will significantly benefit clinical practice",
+            "Multi-label classification for CXRs using deep CNNs = the research problem"
+          ],
+          "citation_keys_from_paper": ["[1] England NHS imaging stats", "[2] WHO TB report", "[3] spontaneous pneumothorax incidence"]
+        },
+        {
+          "id": "1.para3-4",
+          "role": "Survey of prior CXR DL approaches",
+          "verbatim_key_claims": [
+            "Rajpurkar [10]: CheXNet (DenseNet-121) beats pneumonia radiologist on ChestX-ray14",
+            "Rajpurkar [12]: CheXNeXt — improved DenseNet on par with radiologists on 10 pathologies",
+            "Yao [34]: CNN encoder + RNN decoder to learn label dependencies from data",
+            "Kumar [13]: cascaded DNN for multi-label classification",
+            "Chen [19]: conditional training strategy for PLCO hierarchy",
+            "CheXpert [21] + MIMIC-CXR [23]: large-scale datasets enabling robust supervised learning",
+            "Irvin [21]: DenseNet on CheXpert baseline; U-Ignore, U-Ones, U-Zeros for uncertain labels; AUC 0.907 (test)"
+          ]
+        },
+        {
+          "id": "1.para5",
+          "role": "Gap identification — two specific open problems",
+          "verbatim_key_claims": [
+            "Gap 1: standard multi-label classifiers often IGNORE DOMAIN KNOWLEDGE",
+            "Gap 1 specifics: how to leverage clinical taxonomies of disease patterns is an open question",
+            "Gap 2: how to handle uncertainty labels is still an open question — not received much research attention",
+            "Prior uncertain handling (U-Ignore/U-Ones/U-Zeros) are all suboptimal"
+          ],
+          "writing_note": "Two gaps stated in same paragraph, not separately. This is efficient for a journal intro. Our paper should state our two gaps analogously: (1) flat classifiers ignore IS-A hierarchy at inference, (2) uncertainty is quantified but not used for decision-routing."
+        },
+        {
+          "id": "1.para6",
+          "role": "Method preview",
+          "verbatim_key_claims": [
+            "Develop approach combining conditional training [19] and label smoothing [20] into novel training procedure",
+            "Adapt Chen et al. [19] conditional training to CheXpert hierarchy (different from PLCO)",
+            "Directly exploit predefined hierarchy instead of learning it from data [34]",
+            "Unlike [19][34]: also propose LSR to leverage uncertainty labels"
+          ]
+        },
+        {
+          "id": "1.para7",
+          "role": "Contributions + results summary",
+          "verbatim_key_claims": [
+            "1. Novel training strategy: (a) conditional training based on predefined hierarchy; (b) LSR for uncertain labels. Ablation verifies each independently.",
+            "2. Train series of state-of-the-art CNNs on frontal CheXpert for 14 thoracic diseases",
+            "3. Best model (ensemble): AUC 0.940 on validation; AUC 0.930 on hidden test — outperforms 2.6/3 radiologists"
+          ]
+        },
+        {
+          "id": "1.para8",
+          "role": "Road map paragraph",
+          "verbatim_key_claims": [
+            "Section 2: related work; Section 3: proposed method; Section 4: experiments; Section 5: discussion; Section 6: conclusion"
+          ],
+          "writing_note": "Journal papers use an explicit road map paragraph at the end of the intro. Conference papers almost never do this. Include if targeting journal."
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "title": "Related Works",
+      "purpose": "Broad survey of medical DL + multi-label CXR + hierarchical classification across domains. More thorough than a conference paper.",
+      "length_signal": "~1.5 pages (journal), 3 paragraphs",
+      "subsections": [
+        {
+          "id": "2.para1",
+          "role": "DL in medical imaging — general",
+          "verbatim_key_claims": [
+            "Large-scale labeled datasets [22=ChestX-ray14, 21=CheXpert, 23=MIMIC-CXR] + high-performing architectures [24=ResNet, 25=DenseNet, 26=Inception-ResNet, 27=NASNet] enable expert-level CAD",
+            "Most DL medical imaging relies on CNNs [30=LeCun, 31=Krizhevsky] for local feature extraction",
+            "Examples of expert-level performance: [10][12][11][28][29][16]"
+          ]
+        },
+        {
+          "id": "2.para2",
+          "role": "Multi-label CXR classification specifically",
+          "verbatim_key_claims": [
+            "CXR multi-label: each training example associated with possibly more than one label [32][33]",
+            "CheXNet [10]: DenseNet-121 on ChestX-ray14, SotA + beat pneumonia radiologist",
+            "CheXNeXt [12]: improved DenseNet, on par with radiologists on 10 CheXpert pathologies",
+            "Yao [34]: CNN+RNN to learn label dependencies (learned hierarchy vs. predefined)",
+            "Kumar [13]: cascaded DNN for multi-label CXR",
+            "Chen [19]: conditional training strategy for PLCO hierarchy — closest prior work",
+            "CheXpert [21] + MIMIC-CXR [23]: new large-scale resources; both use NLP labeler with uncertain (-1) annotations"
+          ]
+        },
+        {
+          "id": "2.para3",
+          "role": "Hierarchical learning outside CXR",
+          "verbatim_key_claims": [
+            "Hierarchies used successfully in: text [39], visual recognition [40][41], genomics [42]",
+            "Root nodes = most general classes (e.g., Opacity), leaf nodes = most specific (e.g., Pneumonia)",
+            "Common approach [19]: train on conditional data (parent-positive), then finetune on all",
+            "Difference from Yao [34]: they directly exploit predefined hierarchy instead of learning it"
+          ]
+        }
+      ],
+      "writing_note": "Unlike Asadi 2025 who only surveys CXR papers, Pham 2020 also includes general hierarchical classification (text, vision, genomics). This gives theoretical breadth. Include at least one non-CXR hierarchical paper when writing our related work."
+    },
+    {
+      "id": "3",
+      "title": "Proposed Method",
+      "purpose": "Problem formulation → conditional training mechanism → LSR for uncertain labels",
+      "length_signal": "~5 pages (journal), 3 subsections + equations + figures",
+      "subsections": [
+        {
+          "id": "3.1",
+          "title": "Problem Formulation",
+          "verbatim_14_labels": [
+            "Enlarged Cardiomediastinum", "Cardiomegaly", "Lung Opacity", "Lung Lesion",
+            "Edema", "Consolidation", "Pneumonia", "Atelectasis",
+            "Pneumothorax", "Pleural Effusion", "Pleural Other", "Fracture",
+            "Support Devices", "No Finding"
+          ],
+          "verbatim_key_claims": [
+            "y ∈ {0, 1, -1}^14 where 0=negative, 1=positive, -1=uncertain",
+            "During training: apply various approaches to replace -1 with positive, negative, or smoothed",
+            "Output: ŷ ∈ [0,1]^14 via sigmoid activation on 14 logits [Eq.1]",
+            "Loss: standard BCE over all labels [Eq.2]",
+            "Evaluation: AUC on 5 pathologies (Atelectasis, Cardiomegaly, Consolidation, Edema, Pleural Effusion) — selected for clinical importance and prevalence"
+          ],
+          "equations": {
+            "sigmoid": "ŷ_k = 1 / (1 + exp(-z_k)),  k = 1,...,14   [Eq.1]",
+            "bce": "L(θ) = Σ_i Σ_k [ y_k^(i) log(ŷ_k^(i)) + (1 - y_k^(i)) log(1 - ŷ_k^(i)) ]   [Eq.2]"
+          },
+          "writing_note": "Problem formulation defines all symbols used in §3.2-3.3. Notice: no masking term in the BCE — uncertain labels are resolved BEFORE computing loss (via U-Ignore/Ones/Zeros/LSR policies), unlike our project which uses explicit NaN masking."
+        },
+        {
+          "id": "3.2",
+          "title": "Conditional Training to Learn Dependencies Among Labels",
+          "hierarchy": {
+            "source": "CheXpert label hierarchy proposed by Irvin et al. [21] — NOT Pham's invention",
+            "structure_from_fig1": {
+              "Lung Opacity": ["Edema", "Consolidation", "Atelectasis (partial)"],
+              "Consolidation": ["Pneumonia", "Atelectasis (partial)"],
+              "Enlarged Cardiomediastinum": ["Cardiomegaly"]
+            },
+            "fig2_example": "Train CNN to classify Edema, Atelectasis, Pneumonia on examples where BOTH Lung Opacity AND Consolidation are positive"
+          },
+          "verbatim_key_claims": [
+            "Labels organized as tree/DAG — constructed by domain experts (radiologists), NOT learned from data",
+            "Flat classifiers fail: leaf nodes have very few positive samples → biased toward negative class",
+            "PHASE 1 (conditional training): pretrain CNN on PARTIAL TRAINING SET where ALL parent labels are positive",
+            "  → Network learns conditional probability of child labels given parent is positive",
+            "  → Duration: 5 epochs on parent-positive subset",
+            "PHASE 2 (transfer learning): freeze ALL layers except last FC; retrain 5 epochs on FULL dataset",
+            "  → Improves capacity to predict PARENT-level labels (which can be positive or negative)",
+            "Inference strategy: compute UNCONDITIONAL probability via Bayes product along root-to-leaf path",
+            "Theoretical: p(C) = p(A) × p(B|A) × p(C|B,A)  [Eqs.3-6]",
+            "Key property: p(child) is always ≤ p(parent) — clinically consistent by construction"
+          ],
+          "important_nuance": {
+            "about_inference": "After Phase 2, the model is retrained on full data, so outputs ≈ unconditional probabilities. The Bayes product correction is the THEORETICAL JUSTIFICATION but in practice Phase 2 finetuning absorbs this. Paper states: 'this strategy is not applied to the validation set since the classifier has been trained on the full dataset during the second phase.'",
+            "implication": "In their actual experiments, they likely use the raw Phase-2 outputs at inference, not the explicit Bayes product. The product formula guarantees p(child) ≤ p(parent) as a theoretical property."
+          },
+          "figures": {
+            "Fig1": "CheXpert disease hierarchy (14 labels as tree) — relationships proposed by Irvin et al.",
+            "Fig2_left": "Abstract conditional training illustration: red nodes (Parent=+), blue nodes (Leaf=+/-)",
+            "Fig2_right": "CXR-specific example: classify {Edema, Atelectasis, Pneumonia} given {Lung Opacity=+, Consolidation=+}",
+            "Fig3": "4-disease tree A,B,C,D for Bayes product derivation"
+          },
+          "equations": {
+            "bayes_product_C": "p(C) = p(C, B, A) = p(A) × p(B|A) × p(C|B,A)   [Eqs.3-4]",
+            "bayes_product_D": "p(D) = p(D, B, A) = p(A) × p(B|A) × p(D|B,A)   [Eqs.5-6]"
+          },
+          "critical_difference_from_our_paper": {
+            "their_approach": "Hierarchy enforced by TRAINING DATA SELECTION: exclude parent-negative samples from Phase 1",
+            "our_approach": "Hierarchy enforced by INFERENCE-TIME GATE: use MC-Dropout variance to decide whether to report child or fall back to parent",
+            "their_uncertainty_handling": "None at inference — just threshold sigmoid outputs",
+            "our_uncertainty_handling": "Explicit sigma_c > tau_u gate: high variance → suppress child → report parent"
+          }
+        },
+        {
+          "id": "3.3",
+          "title": "Leveraging Uncertainty in CXRs with Label Smoothing Regularization",
+          "verbatim_key_claims": [
+            "Problem: many CXR images have uncertain labels (-1) from NLP labeler ambiguities",
+            "Prior uncertain handling: U-Ignore (wastes data), U-Ones (map -1→1, wrong labels), U-Zeros (map -1→0, wrong labels)",
+            "U-Ignore can't use full label list on whole dataset; U-Ones/U-Zeros introduce wrong labels",
+            "Propose LSR for uncertain samples: soft labels near 1 or near 0 instead of hard 0/1",
+            "U-Ones+LSR: map each -1 → u ~ Uniform(0.55, 0.85)  [soft positive] [Eq.7]",
+            "U-Zeros+LSR: map each -1 → u ~ Uniform(0, 0.3)  [soft negative]",
+            "Prevents model from being OVERCONFIDENT on uncertain training examples",
+            "LSR interval bounds [0.55, 0.85] and [0, 0.3] chosen EMPIRICALLY"
+          ],
+          "equations": {
+            "lsr": "ỹ_k^(i) = u ~ U(a1, b1)  if y_k^(i) = -1,  else  y_k^(i)   [Eq.7]"
+          },
+          "lsr_references": [
+            "[20] Müller, Kornblith, Hinton: 'When does label smoothing help?' NeurIPS 2019",
+            "[43] Szegedy et al.: 'Rethinking the Inception architecture' CVPR 2016 (introduced label smoothing)",
+            "[44] Pereyra et al.: 'Regularizing neural networks by penalizing confident output distributions' arXiv 2017"
+          ],
+          "writing_note": "LSR connects label smoothing (regularization technique) to uncertainty handling in multi-label CXR. The key insight: 'don't hard-commit to 0 or 1 for ambiguous labels.' Our project uses NaN masking (not-applicable) instead — a different strategy that avoids providing any supervision signal on uncertain labels."
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "title": "Experiments",
+      "purpose": "Dataset → preprocessing → architecture+training details → ablation → ensembling → quantitative results → radiologist comparison",
+      "length_signal": "~8 pages (journal), 6 subsections, 4 tables, 2 figures",
+      "subsections": [
+        {
+          "id": "4.1",
+          "title": "CXR Dataset and Settings",
+          "verbatim_key_claims": [
+            "CheXpert dataset: 224,316 X-ray scans from 65,240 patients",
+            "14 observations (12 common thoracic pathologies + 2 other observations)",
+            "Labels: {positive=1, negative=0, uncertain=-1} per NLP labeler",
+            "Split: Train=223,414 / Validation=200 (3 board-certified radiologists, majority vote) / Test=500 (hidden, 8 radiologists)",
+            "Test ground truth: majority vote of 5 radiologists; 3 remaining used as performance benchmarks",
+            "Evaluation: AUC on 5 pathologies (Atelectasis, Cardiomegaly, Consolidation, Edema, Pleural Effusion) — selected for clinical importance and prevalence"
+          ],
+          "citation_keys": ["irvin2019chexpert"]
+        },
+        {
+          "id": "4.2",
+          "title": "Data Cleaning and Normalization",
+          "verbatim_key_claims": [
+            "Raw CXRs may have: irrelevant noisy areas (text, irregular borders), poor alignment",
+            "Preprocessing steps to reduce irrelevant factors and focus on lung area:",
+            "Step 1: Rescale all CXRs to 256×256 pixels",
+            "Step 2: Template matching [45=Brunelli 2009] → find 224×224 pixel template chest image in original",
+            "Step 3: Normalize with ImageNet training set mean and standard deviation [31=Krizhevsky 2012]",
+            "Goal: reduce source-dependent variation across CXR acquisition systems"
+          ],
+          "writing_note": "Their preprocessing uses template matching to CROP the lung region — this is more sophisticated than standard center crop. Our project uses center crop (224×224 after resize). Note: they normalize with ImageNet stats even though DenseNet-121 is ImageNet pretrained, so this is appropriate."
+        },
+        {
+          "id": "4.3",
+          "title": "Network Architecture and Training Methodology",
+          "verbatim_key_claims": [
+            "Backbone: DenseNet-121 [25] (ImageNet pretrained [47])",
+            "Head: 14-dim dense layer + sigmoid activations → probability of each pathology",
+            "Optimizer: Adam [46] with β1=0.9, β2=0.999, batch size=32",
+            "LR: initial 1e-4, REDUCED BY FACTOR 10 AFTER EACH EPOCH during training",
+            "Phase 1 (conditional training): 5 epochs on PARENT-POSITIVE SUBSET (excludes samples with negative parent labels)",
+            "Phase 2 (transfer learning): add back excluded samples to full dataset; freeze all layers EXCEPT last FC; train 5 more epochs on full data",
+            "Goal of Phase 2: improve parent-level label prediction (parent can be positive or negative in full data)",
+            "10 ablation conditions trained: U-Ignore / U-Ones / U-Zeros × {baseline, +CT, +LSR, +CT+LSR}",
+            "LSR intervals: U-Ones → Uniform(0.55, 0.85); U-Zeros → Uniform(0, 0.3)"
+          ],
+          "hardware_framework": "Keras/TensorFlow, Windows 10, single NVIDIA RTX 2080 Ti 11GB",
+          "writing_note": "LR reduction by factor 10 PER EPOCH is aggressive. By epoch 3 LR would be 1e-7. This works because they only train for 5+5 epochs total. Our project uses cosine annealing with warmup — quite different."
+        },
+        {
+          "id": "4.4",
+          "title": "Model Ensembling",
+          "verbatim_key_claims": [
+            "Single CNN hard to achieve high+consistent AUC for ALL disease labels simultaneously",
+            "AUC often varies with network architecture — motivates ensemble",
+            "6 architectures evaluated: DenseNet-121, DenseNet-169, DenseNet-201 [25], Inception-ResNet-v2 [26], Xception [48], NASNetLarge [27]",
+            "Ensemble: average outputs of all 6 trained networks",
+            "TTA (test-time augmentation) [49=Simonyan/VGG reference actually seems wrong - likely a different reference]: 10 random transforms per test CXR, average outputs",
+            "TTA transforms: horizontal flip, rotate ±7°, scale ±2%, shear ±5px",
+            "Ablation: also evaluated ensemble WITHOUT TTA to isolate TTA contribution"
+          ],
+          "note_on_TTA": "TTA is NOT Monte Carlo Dropout. TTA = 10 random augmentations of the test image, model outputs averaged. Separate from uncertainty estimation."
+        },
+        {
+          "id": "4.5",
+          "title": "Quantitative Results",
+          "table1_auroc_validation_5labels": {
+            "description": "AUC on CheXpert validation set (5 pathologies), all 10 ablation conditions",
+            "note": "ALL penalty-based scenarios use uncertain label approach as specified",
+            "results": {
+              "U-Ignore": {"Ate": 0.768, "Car": 0.795, "Con": 0.915, "Ede": 0.914, "Eff": 0.925, "Mean": 0.863},
+              "U-Ignore+CT": {"Ate": 0.780, "Car": 0.815, "Con": 0.922, "Ede": 0.914, "Eff": 0.928, "Mean": 0.872},
+              "U-Zeros": {"Ate": 0.745, "Car": 0.813, "Con": 0.882, "Ede": 0.921, "Eff": 0.930, "Mean": 0.858},
+              "U-Zeros+CT": {"Ate": 0.782, "Car": 0.835, "Con": 0.922, "Ede": 0.923, "Eff": 0.921, "Mean": 0.877},
+              "U-Zeros+LSR": {"Ate": 0.781, "Car": 0.815, "Con": 0.920, "Ede": 0.923, "Eff": 0.918, "Mean": 0.871},
+              "U-Zeros+CT+LSR": {"Ate": 0.806, "Car": 0.833, "Con": 0.929, "Ede": 0.933, "Eff": 0.921, "Mean": 0.884},
+              "U-Ones": {"Ate": 0.800, "Car": 0.780, "Con": 0.882, "Ede": 0.918, "Eff": 0.920, "Mean": 0.860},
+              "U-Ones+CT": {"Ate": 0.813, "Car": 0.816, "Con": 0.895, "Ede": 0.923, "Eff": 0.912, "Mean": 0.872},
+              "U-Ones+LSR": {"Ate": 0.818, "Car": 0.834, "Con": 0.874, "Ede": 0.925, "Eff": 0.921, "Mean": 0.874},
+              "U-Ones+CT+LSR": {"Ate": 0.825, "Car": 0.855, "Con": 0.937, "Ede": 0.930, "Eff": 0.923, "Mean": 0.894}
+            },
+            "key_finding": "Best single model: U-Ones+CT+LSR = AUC 0.894. CT alone: +0.009 (U-Ignore baseline). LSR alone: +0.014 (U-Ones baseline). CT+LSR together: +0.034 — synergistic."
+          },
+          "table2_comparison_to_prior": {
+            "description": "Comparison to prior state-of-the-art on CheXpert validation (5 labels)",
+            "results": {
+              "U-IgnoreLP [50]": 0.826, "U-IgnoreBR [50]": 0.828, "U-IgnoreCC [50]": 0.814,
+              "U-Ignore [21]": 0.889, "U-Zeros [21]": 0.888, "U-Ones [21]": 0.893,
+              "U-MultiClass [21]": 0.895, "U-SelfTrained [21]": 0.894, "Ours (ensemble+TTA)": 0.940
+            },
+            "key_finding": "Ensemble+TTA (0.940) improves by ~4.5% over best Irvin et al. baseline (0.895). Largest jump in multi-label CXR at time of writing."
+          },
+          "table3_TM_effect": {
+            "TM=no, U-Ignore": 0.857,
+            "TM=yes, U-Ignore": 0.863,
+            "finding": "Template matching adds +0.006 — marginal contribution"
+          },
+          "table4_TTA_effect": {
+            "Ensemble+TTA": 0.940,
+            "Ensemble no TTA": 0.937,
+            "finding": "TTA adds only +0.003 — also marginal. CT+LSR are the PRIMARY drivers of improvement."
+          },
+          "verbatim_key_claims": [
+            "CT and LSR contribute independently and additively — both needed for best performance",
+            "TM and TTA both marginal (<+0.006) — main improvement comes from CT+LSR",
+            "AUC for each label VARIES with architecture → ensemble important for robustness"
+          ]
+        },
+        {
+          "id": "4.6",
+          "title": "Independent Evaluation and Comparison to Radiologists",
+          "verbatim_key_claims": [
+            "Test set: 500 CXRs labeled by 8 board-certified radiologists",
+            "3 used as performance benchmark (AUC computed against majority-of-5 ground truth)",
+            "Model AUC on test: 0.930 (mean over 5 pathologies) — evaluated with majority of 5 as ground truth",
+            "ROC curves plotted WITH radiologist operating points overlaid",
+            "Superiority: counted number of radiologists whose operating points lie BELOW the model ROC curve",
+            "Result: model outperforms 2.6 out of 3 radiologists on average — best on CheXpert leaderboard at time"
+          ],
+          "figures": {
+            "Fig4": "ROC curves for 5 pathologies on validation set — Atelectasis(0.909), Cardiomegaly(0.910), Consolidation(0.957), Edema(0.958), Pleural Effusion(0.964)",
+            "Fig5": "Example model predictions — CXR image with bar chart of probabilities for all 14 labels (4 example images)"
+          },
+          "writing_note": "Radiologist comparison section is the most impactful part of CXR papers for clinical credibility. They plot radiologist OPERATING POINTS on the model's ROC curve — a clean visual showing model superiority at every operating threshold."
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "title": "Discussions",
+      "purpose": "Key findings + meaning → honest limitations",
+      "length_signal": "~1.5 pages (journal), 2 subsections",
+      "subsections": [
+        {
+          "id": "5.1",
+          "title": "Key Findings and Meaning",
+          "verbatim_key_claims": [
+            "Empirically showed major improvement by exploiting disease dependencies AND label smoothing",
+            "CT and LSR each contribute — CT adds hierarchy awareness, LSR adds robustness to uncertainty",
+            "Difficult to obtain good AUC for ALL diseases with a single CNN — architecture matters per pathology",
+            "Ensemble of multiple DL models plays key role in boosting generalization",
+            "Our findings + recent publications [10][11][12][13]: DL can identify thoracic disease risk and assist patient screening/diagnosing/physician training"
+          ]
+        },
+        {
+          "id": "5.2",
+          "title": "Limitations",
+          "verbatim_key_claims": [
+            "Conditional training requires PREDEFINED hierarchy — not easy to construct, usually imperfect",
+            "Difficult to scale to DEEPER hierarchies: too many examples excluded in Phase 1",
+            "LSR hyperparameters [0.55, 0.85] and [0, 0.3] chosen HEURISTICALLY — not theoretically justified",
+            "TTA increases inference time (latency concern for clinical deployment)",
+            "SINGLE INSTITUTION: trained and evaluated on CheXpert (Stanford) — geographic variation unknown",
+            "Model uses IMAGE ONLY: no patient age, gender, medical history, multi-view input",
+            "CXR quality issues: rotated, low-res, text overlays, noise — template matching insufficient to remove all"
+          ],
+          "writing_note": "Limitations section in journal is explicit and honest. 7 distinct limitations listed. Conference papers rarely do this. Writing an honest limitations section builds credibility with reviewers and readers."
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "title": "Conclusion",
+      "verbatim_key_claims": [
+        "Comprehensive approach for building high-precision CAD for common thoracic disease classification",
+        "Investigated: data cleaning, network design, training, ensembling",
+        "Novel training procedure: CT (disease hierarchy) + LSR (uncertain labels)",
+        "Ablation confirms both components contribute independently",
+        "Ensemble+TTA: AUC 0.940 on validation, 0.930 on test; better than 2.6/3 radiologists",
+        "Future: larger clinically labeled dataset (VinDr-CXR, from Vietnam hospitals)"
+      ],
+      "length_signal": "~0.5 page"
+    }
+  ],
+  "reference_list_key_entries": {
+    "[19] Chen et al. 2019": "Deep hierarchical multi-label classification of CXR images, MIDL 2019 — closest prior work for conditional training",
+    "[20] Müller et al. 2019": "When does label smoothing help? NeurIPS 2019 — LSR theoretical basis",
+    "[21] Irvin et al. 2019": "CheXpert: Large CXR dataset with uncertainty labels, AAAI 2019",
+    "[22] Wang et al. 2017": "ChestX-ray8, CVPR 2017",
+    "[23] Johnson et al. 2019": "MIMIC-CXR, Scientific Data 2019",
+    "[24] He et al. 2016": "ResNet, CVPR 2016",
+    "[25] Huang et al. 2017": "DenseNet, CVPR 2017",
+    "[26] Szegedy et al. 2017": "Inception-ResNet-v2, AAAI 2017",
+    "[27] Zoph et al. 2018": "NASNetLarge, CVPR 2018",
+    "[34] Yao et al. 2017": "Learning to diagnose from scratch by exploiting label dependencies (CNN+RNN), arXiv:1710.10501",
+    "[43] Szegedy et al. 2016": "Rethinking Inception, CVPR 2016 — label smoothing origin",
+    "[44] Pereyra et al. 2017": "Regularizing by penalizing confident outputs, arXiv:1701.06548",
+    "[45] Brunelli 2009": "Template matching techniques, Wiley — used for CXR crop preprocessing",
+    "[46] Kingma & Ba 2014": "Adam optimizer",
+    "[47] Deng et al. 2009": "ImageNet, CVPR 2009",
+    "[48] Chollet 2017": "Xception, CVPR 2017",
+    "[50] Allaouzi & Ahmed 2019": "Novel approach for multi-label CXR classification, IEEE Access — comparison baseline",
+    "[51] Calli et al. 2019": "FRODO: free rejection of OOD samples in CXR — mentioned in limitations"
+  },
+  "structural_lessons": [
+    "Two-contribution methods section: §3.2 for hierarchy (the complex part) + §3.3 for uncertainty (the simpler LSR). Structure each as: motivation → approach → formula → intuition.",
+    "Ablation table (Table 1) has 10 rows = 3 uncertainty policies × {base, +CT, +LSR, +CT+LSR}. Disciplined factorial design. Each factor isolated before combining.",
+    "SOTA comparison (Table 2) puts all Irvin et al. [21] baseline variants explicitly — shows improvement over ALL of them, not just the best.",
+    "TTA and TM both ablated separately (Tables 3-4) — shows the main gains come from CT+LSR, not preprocessing tricks.",
+    "Radiologist comparison is a 'social proof' section: plot model ROC with radiologist operating points overlaid. Count how many lie below the curve.",
+    "Figure 5 (example predictions) shows all 14 label probabilities as bar chart per image — a useful visualization format for multi-label.",
+    "Limitations section has 7 explicit bullet-length points. Each is a concrete flaw, not vague hedging."
+  ],
+  "differentiation_from_our_paper": {
+    "hierarchy_mechanism": {
+      "pham2020": "TRAINING-TIME: filter training set to parent-positive subset (Phase 1) → finetune on full data (Phase 2). Hierarchy tells WHICH SAMPLES to train on.",
+      "ours": "INFERENCE-TIME: use MC-Dropout variance gate. If sigma_c > tau_u, suppress child prediction and fall back to parent. Hierarchy tells HOW TO ROUTE PREDICTIONS at test time."
+    },
+    "uncertainty_handling_training": {
+      "pham2020": "LSR: replace -1 with soft label u ~ Uniform(a, b). Provides soft supervision on uncertain samples.",
+      "ours": "NaN masking: mask uncertain labels from loss entirely. No supervision signal on uncertain labels — avoids any risk of mislabeling direction."
+    },
+    "uncertainty_handling_inference": {
+      "pham2020": "No uncertainty estimation at inference. Outputs are raw sigmoid probabilities. No abstention mechanism.",
+      "ours": "Explicit uncertainty estimate per label: sigma_c from T=30 MC-Dropout passes. High sigma_c → abstain or fall back to parent."
+    },
+    "backbone": {
+      "pham2020": "DenseNet-121 ImageNet pretrained. Single backbone for ablation; 6 architectures for ensemble.",
+      "ours": "DenseNet-121 TorchXRayVision pretrained (densenet121-res224-all). Single backbone, no ensemble."
+    },
+    "datasets": {
+      "pham2020": "CheXpert only (224K studies, 14 labels).",
+      "ours": "6 datasets pooled: NIH ChestX-ray14 + CheXpert + VinDr-CXR + VinDr-PCXR + TBX11K + COVIDx (~417K studies, 51 canonical labels)."
+    },
+    "label_space": {
+      "pham2020": "14 CheXpert labels (NLP-extracted, paper labels).",
+      "ours": "51 Indonesian clinical canonical labels (PDPI/PNPK/KKI authority). Superset of CheXpert labels."
+    },
+    "evaluation_metric": {
+      "pham2020": "AUC on 5 selected CheXpert pathologies. No selective prediction metric.",
+      "ours": "AUROC + F1 + ECE + AURC (selective prediction) + hierarchical consistency rate + Grad-CAM localization."
+    },
+    "suggested_cite_sentence": "Pham et al. (2020) exploit the CheXpert disease hierarchy through a two-phase conditional training procedure: first pretraining on a parent-positive subset to learn child-level conditional probabilities, then finetuning on the full dataset. While this approach enforces hierarchical structure during training, it provides no mechanism for uncertainty-based prediction routing at inference time. By contrast, our method applies the hierarchy at inference: when MC-Dropout variance for a child label exceeds a threshold, we suppress the child prediction and fall back to its parent label, providing explicit uncertainty-aware hierarchical decision support."
+  }
+}

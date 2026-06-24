@@ -1,0 +1,523 @@
+{
+  "meta": {
+    "key": "ourpaper_ibiomed",
+    "title_primary": "When Unsure, Predict Broader: Uncertainty-Gated Coarse Fallback for Hierarchical Multi-Label Chest X-Ray Classification",
+    "title_alternatives": [
+      "Uncertainty-Gated Coarse Fallback for Hierarchical Multi-Label Chest X-Ray Classification with MC-Dropout",
+      "Trustworthy Hierarchical Chest X-Ray Classification via Uncertainty-Gated Coarse Fallback"
+    ],
+    "target_venue": "iBioMed (IEEE International Conference on Biomedical Engineering)",
+    "format": "IEEE conference (double-column, ~6-8 pages)",
+    "status": "methods drafted; results section pending after real-data runs",
+    "draft_file": "document/ibiomed_methods_draft-2606.md",
+    "authoritative_grid": "configs/grid_base.yaml + configs/grid/*.yaml",
+    "headline_contributions": [
+      "1. First multi-label CXR classifier aligned with 51 Indonesian canonical labels from PDPI/PNPK/KKI clinical authority",
+      "2. Differentiable double-ReLU hierarchical penalty (vs. Asadi 2025 hard indicator — fully differentiable during training)",
+      "3. MC-Dropout variance gate for INFERENCE-TIME hierarchical fallback (vs. Pham 2020 training-time conditional data filtering)",
+      "4. AURC-based selective prediction evaluation using Zhou et al. (2025) plug-in estimator — novel metric for clinical CXR deployment"
+    ]
+  },
+  "known_draft_errors": [
+    "Section B lists datasets as 'CheXpert, NIH ChestX-ray14, VinDr-CXR, PadChest, Open-I, RSNA Pneumonia' — WRONG. Actual training datasets: NIH ChestX-ray14, CheXpert, VinDr-CXR, VinDr-PCXR, TBX11K, COVIDx. PadChest/Open-I/RSNA are in the BACKBONE's pretraining (TXV) but not our fine-tuning data.",
+    "Section B should clarify the PadChest/Open-I/RSNA appear only in 'backbone pretrained on TorchXRayVision densenet121-res224-all' — NOT our own fine-tuning splits."
+  ],
+  "ablation_grid": {
+    "description": "8-condition factorial ablation: 2 × 2 × 2",
+    "factors": {
+      "seg": ["no_seg (no segmentation mask)", "seg (lung mask conditioning via CheXmask-U)"],
+      "label_structure": ["flat (standard BCE, no hierarchy)", "hierarchical (HBCELoss with ReLU penalty)"],
+      "uq": ["no_gate (plain sigmoid threshold, no MC-Dropout gate)", "gate (MC-Dropout variance gate, T=30)"]
+    },
+    "conditions": [
+      "flat + no_seg + no_gate  (pure baseline)",
+      "flat + no_seg + gate",
+      "flat + seg + no_gate",
+      "flat + seg + gate",
+      "hierarchical + no_seg + no_gate",
+      "hierarchical + no_seg + gate  (main model, no seg)",
+      "hierarchical + seg + no_gate",
+      "hierarchical + seg + gate  (full model)"
+    ]
+  },
+  "key_hyperparameters": {
+    "image_size": "224×224 (center crop from 256 shorter side)",
+    "backbone": "DenseNet-121 (TorchXRayVision densenet121-res224-all)",
+    "backbone_pretraining": "NIH ChestX-ray14, PadChest, CheXpert, MIMIC-CXR, Open-I, RSNA Pneumonia (TXV corpus)",
+    "classification_head": "Linear 1024→51 + sigmoid",
+    "dropout_p": 0.2,
+    "mc_dropout_passes": 30,
+    "lambda_hbce": 0.5,
+    "optimizer": "AdamW",
+    "lr_backbone": "1e-5",
+    "lr_head": "1e-4",
+    "weight_decay": 0.01,
+    "lr_schedule": "cosine annealing + linear warmup (1000 steps)",
+    "precision": "bfloat16 mixed",
+    "effective_batch_size": 32,
+    "grad_clip_norm": 1.0,
+    "early_stop_patience": 3,
+    "seed": 42,
+    "IS_A_edges": 13,
+    "tau_p": "selected on validation set (TBD after runs)",
+    "tau_u": "selected on validation set (smallest value meeting target hierarchical consistency rate)"
+  },
+  "sections": [
+    {
+      "id": "I",
+      "title": "Introduction",
+      "purpose": "CXR clinical motivation → multi-label challenge → hierarchy gap → uncertainty gap → contributions → paper road map",
+      "length_signal": "~1 column (IEEE double-column), 4-5 paragraphs",
+      "structural_lesson_source": "Pham 2020 intro structure (gap identification before contributions), Zhou 2025 (explicit contribution list)",
+      "subsections": [
+        {
+          "id": "I.para1",
+          "role": "Clinical need",
+          "key_claims": [
+            "CXR: most common radiological exam; widespread in Indonesia but specialist-scarce",
+            "Automated multi-label classification can assist triage and screening",
+            "51 clinically relevant thoracic findings from Indonesian guidelines (PDPI/PNPK/KKI)",
+            "Multi-label: most CXRs show co-occurring findings — not single-disease classification"
+          ],
+          "citation_keys": ["wang2017chestxray14", "pham2020hierarchdep"]
+        },
+        {
+          "id": "I.para2",
+          "role": "Gap 1 — flat classifiers ignore disease hierarchy",
+          "key_claims": [
+            "Standard multi-label classifiers predict each finding independently",
+            "Clinical knowledge encodes IS-A relationships: Pneumonia implies Consolidation; COVID-19 Pneumonia implies Pneumonia",
+            "Flat classifiers produce hierarchically inconsistent outputs (child positive, parent negative) — clinically invalid",
+            "Prior work (Asadi 2025, Pham 2020) addresses hierarchy at TRAINING TIME: data filtering or loss penalty",
+            "Gap: no prior work applies hierarchy at INFERENCE TIME via uncertainty routing"
+          ],
+          "citation_keys": ["asadi2025cihmlc", "pham2020hierarchdep", "chen2019deephier"]
+        },
+        {
+          "id": "I.para3",
+          "role": "Gap 2 — uncertainty is quantified but not used for decision routing",
+          "key_claims": [
+            "Deep networks are overconfident — sigmoid output ≠ calibrated probability",
+            "MC-Dropout (Gal & Ghahramani 2016) estimates per-finding uncertainty via T stochastic passes",
+            "Prior hierarchical CXR methods produce no per-finding uncertainty signal at inference",
+            "Gap: when model is uncertain about a specific child finding, safer prediction is its parent — no method uses this routing"
+          ],
+          "citation_keys": ["gal2016mcdropout", "asadi2025cihmlc", "pham2020hierarchdep"]
+        },
+        {
+          "id": "I.para4",
+          "role": "Contributions (4 numbered)",
+          "key_claims": [
+            "1. First multi-label CXR classifier targeting 51 Indonesian canonical labels (PDPI/PNPK/KKI), pooling 6 heterogeneous public datasets",
+            "2. Differentiable double-ReLU hierarchical penalty (HBCE): penalty(g,c) = ReLU(p_c−0.5)·ReLU(0.5−p_g) — fully differentiable alternative to Asadi 2025 hard indicator",
+            "3. Uncertainty-Gated Coarse Fallback: MC-Dropout variance gate at INFERENCE TIME — if σ_c > τ_u, suppress child, fall back to parent; no architecture change required",
+            "4. AURC-based selective prediction evaluation (Zhou 2025 plug-in estimator) — new metric for clinical deployment safety, comparing fallback model vs. flat baseline at matched coverage"
+          ]
+        },
+        {
+          "id": "I.para5",
+          "role": "Road map (IEEE conference often omits; include if space allows)",
+          "key_claims": ["Section II: related work; Section III: method; Section IV: experiments; Section V: conclusion"]
+        }
+      ]
+    },
+    {
+      "id": "II",
+      "title": "Related Work",
+      "purpose": "Cover: (a) hierarchical multi-label CXR, (b) uncertainty estimation for CXR, (c) selective prediction metrics",
+      "length_signal": "~0.75 column (IEEE), 3 short paragraphs",
+      "structural_lesson_source": "Pham 2020 (group by topic, not chronology); Asadi 2025 (compact, tight citations)",
+      "subsections": [
+        {
+          "id": "II.A",
+          "title": "Hierarchical Multi-Label CXR Classification",
+          "key_claims": [
+            "CheXpert (Irvin et al. 2019) [21] established 14-label hierarchy with uncertain labels; Pham 2020 exploited it via conditional training",
+            "Pham 2020: two-phase conditional training (parent-positive subset → finetune on full data); Bayes product at inference for p(child) ≤ p(parent)",
+            "Asadi 2025 (CIHMLC): HBCE loss with IS-A hard indicator penalty; MC-Dropout at inference but no uncertainty-based routing",
+            "Chen et al. 2019 (MIDL): hierarchical multi-label classification of CXR — conditional training on PLCO hierarchy",
+            "OUR DISTINCTION from Pham 2020: we apply hierarchy at INFERENCE TIME via variance gate, not training-time data filtering",
+            "OUR DISTINCTION from Asadi 2025: (a) differentiable ReLU penalty vs. hard indicator; (b) variance gate suppresses child when uncertain; (c) 51 Indonesian labels vs. 5-15 CheXpert labels"
+          ],
+          "citation_keys": ["asadi2025cihmlc", "pham2020hierarchdep", "chen2019deephier", "irvin2019chexpert"]
+        },
+        {
+          "id": "II.B",
+          "title": "Uncertainty Estimation in Medical Imaging",
+          "key_claims": [
+            "MC-Dropout (Gal & Ghahramani 2016): dropout at inference + T forward passes → mean + variance; Bayesian approximation",
+            "Deep ensembles (Lakshminarayanan 2017): multiple networks — effective but costly (we use single backbone)",
+            "ECE (Guo 2017): calibration measure; reliability diagrams for verification",
+            "Prior CXR uncertainty: Dvijotham 2023 (Nature Medicine) — complementarity-driven deferral to clinicians — related but single-label",
+            "OUR DISTINCTION: we use MC-Dropout variance as a per-LABEL gating signal, not just a rejection score for the whole image"
+          ],
+          "citation_keys": ["gal2016mcdropout", "lakshminarayanan2017ensembles", "dvijotham2023nature"]
+        },
+        {
+          "id": "II.C",
+          "title": "Selective Prediction and AURC",
+          "key_claims": [
+            "Selective classifiers abstain when uncertain (Chow 1970 original reject option concept)",
+            "AURC metric characterizes risk-coverage trade-off",
+            "Zhou et al. 2025 (ICML): formal population AURC + O(√ln(n)/n) plug-in estimator — safe citation (KU Leuven)",
+            "Franc et al. 2023 (JMLR): SELE score as AURC lower bound — shown to be unreliable by Zhou 2025",
+            "OUR NOVELTY: first application of AURC to hierarchical multi-label CXR selective prediction comparing fallback model vs. flat baseline"
+          ],
+          "citation_keys": ["zhou2025aurc", "franc2023sele"],
+          "DO_NOT_CITE": ["geifman2017selective (Israeli/Technion)", "geifman2019biasreduced (Israeli/Technion)", "elyaniveternal2010 (Israeli/Technion)", "galil2023 (Israeli)", "goren2024hsc (Israeli)"]
+        }
+      ]
+    },
+    {
+      "id": "III",
+      "title": "Methods",
+      "purpose": "Complete method description: problem → datasets → hierarchy → backbone → loss → uncertainty → gate → evaluation",
+      "length_signal": "~2.5 columns (IEEE), 7 subsections matching draft sections A-G",
+      "subsections": [
+        {
+          "id": "III.A",
+          "title": "Problem Formulation",
+          "draft_section": "A",
+          "key_claims": [
+            "Multi-label classification: for image x, predict p ∈ [0,1]^51 (probability that each finding is present)",
+            "51 canonical findings from Indonesian clinical guidelines (PDPI/PNPK/KKI)",
+            "Label values y_c ∈ {0, 1, NaN}: 0=negative, 1=positive, NaN=not annotated by that dataset",
+            "NaN → applicability mask m_c=0: excluded from loss and metrics (never treated as confirmed negative)",
+            "IS-A relationships: for parent g with child set L(g), presence of any child c ∈ L(g) implies presence of parent g",
+            "Model may report at child level, fall back to parent, or abstain — depending on estimated uncertainty"
+          ],
+          "notation_table": {
+            "x": "frontal CXR image",
+            "p_c = σ(z_c)": "sigmoid probability for finding c",
+            "y_c": "ground truth label ∈ {0,1,NaN}",
+            "m_c": "applicability mask ∈ {0,1}",
+            "μ_c": "MC-Dropout predictive mean (T=30 passes)",
+            "σ_c": "MC-Dropout predictive standard deviation",
+            "τ_u": "uncertainty threshold (gate parameter)",
+            "τ_p": "probability threshold for positive prediction",
+            "(g,c)": "IS-A edge: g = parent, c = child",
+            "L(g)": "set of children of parent g"
+          }
+        },
+        {
+          "id": "III.B",
+          "title": "Datasets and Preprocessing",
+          "draft_section": "B",
+          "IMPORTANT_FIX": "The current draft (Section B) lists PadChest, Open-I, RSNA as fine-tuning datasets — this is WRONG. These are in the TorchXRayVision backbone pretraining. Our ACTUAL fine-tuning datasets are listed below. Fix before submission.",
+          "actual_finetuning_datasets": [
+            "NIH ChestX-ray14 (Wang et al. 2017): 112,120 frontal CXRs, 14 labels",
+            "CheXpert (Irvin et al. 2019): 224,316 frontal CXRs, 14 labels, uncertain annotations",
+            "VinDr-CXR (Nguyen et al. 2022): 18,000 CXRs, 28 pathologies, Vietnamese population",
+            "VinDr-PCXR (Pham et al. 2022): pediatric CXRs from Vietnam",
+            "TBX11K (Liu et al. 2020): 11,200 CXRs, TB-focused, bounding box annotations",
+            "COVIDx (Wang et al. 2020): COVID-19 CXRs, 3-class"
+          ],
+          "combined_total": "~417,136 studies after deduplication",
+          "backbone_pretraining_separate": "TorchXRayVision densenet121-res224-all pretrained on NIH+PadChest+CheXpert+MIMIC-CXR+Open-I+RSNA — these are BACKBONE datasets, not our fine-tuning data",
+          "key_claims": [
+            "All 6 datasets mapped to shared 51-label canonical set (src/data/label_space.py CANONICAL_LABELS)",
+            "Labels not annotated by a dataset → NaN → mask m_c=0 → excluded from loss and metrics",
+            "Single frontal image per study: PA > AP > other frontal (view priority)",
+            "Grayscale, TorchXRayVision pixel range [-1024, 1024]",
+            "Resize shorter side to 256 (bicubic), center crop to 224×224",
+            "DICOM: slope+intercept rescale, MONOCHROME1 invert, clip 0.5th–99.5th percentile before scaling",
+            "Uncertain labels (CheXpert -1): mapped to 0 (U-Zero convention) — different from Pham 2020's LSR",
+            "Augmentation (train only): affine ±10°, translate ±5%, scale [0.95,1.05], brightness/contrast ±0.1",
+            "Horizontal flipping DISABLED: mirrors cardiac silhouette (situs inversus anatomy would be wrongly flipped)",
+            "Patient-level splits: each source dataset's official split used; no patient in >1 partition"
+          ],
+          "hierarchy_of_13_IS_A_edges": {
+            "Pneumonia": ["COVID-19 Pneumonia", "Aspiration Pneumonia", "Other Viral Pneumonia"],
+            "ILD": ["IPF", "COP", "HP", "Silicosis", "Asbestosis", "Other Pneumoconiosis", "Sarcoidosis"],
+            "TB": ["Post-TB Obstructive Disease"],
+            "Pleural Effusion": ["Pleural Empyema"],
+            "Pulmonary Hypertension": ["Cor Pulmonale"]
+          },
+          "writing_note": "State explicitly that the 51 canonical labels and 13 IS-A edges are NOT an official taxonomy — they are from Indonesian clinical guidelines (PDPI/PNPK/KKI) and clinically grounded IS-A relationships. The hierarchy file is external, allowing different edge sets without code changes."
+        },
+        {
+          "id": "III.C",
+          "title": "Backbone and Classification Head",
+          "draft_section": "D",
+          "key_claims": [
+            "DenseNet-121 (TorchXRayVision, weights densenet121-res224-all): pretrained on large heterogeneous CXR corpus",
+            "Two justifications: (1) domain-specific feature detectors unavailable in ImageNet-pretrained models; (2) convolutional features amenable to Grad-CAM localization",
+            "Backbone produces 1024-dim pooled feature vector",
+            "Single linear head: 1024→51 logits + per-finding sigmoid",
+            "Dropout layer (p=0.2) precedes head — reused at inference for MC-Dropout (no architecture change needed)",
+            "Training: one-epoch frozen warm-up, then end-to-end fine-tuning",
+            "NO separate coarse-group head: parent probabilities read directly from 51-label sigmoid outputs"
+          ],
+          "differentiation_from_asadi2025": "Asadi 2025 uses random init (trained from scratch) + adds Conv2D(512)+BN+GAP+Dense(128,ReLU)+Dropout(p=0.5)+sigmoid. We use TXV pretrained backbone with single linear head — simpler head, domain-pretrained weights, no extra conv layers.",
+          "differentiation_from_pham2020": "Pham 2020 uses ImageNet pretrained DenseNet-121, 14-dim head, batch=32, 5+5 epochs. We use CXR pretrained TXV weights, 51-dim head, AdamW with differential LRs, cosine annealing with warmup.",
+          "citation_keys": ["cohen2022torchxrayvision", "huang2017densenet"]
+        },
+        {
+          "id": "III.D",
+          "title": "Training Objective",
+          "draft_section": "E",
+          "key_claims": [
+            "Flat loss: masked BCE over all 51 findings; NaN → excluded (not counted in numerator or denominator)",
+            "Hierarchical loss: HBCE = L_flat + λ × Σ_{(g,c) ∈ edges} penalty(g,c)",
+            "λ = 0.5 (same as Asadi 2025 best; no grid search needed for this hyperparameter)",
+            "Penalty: zero when predictions are already consistent — does not distort well-calibrated outputs"
+          ],
+          "equations": {
+            "flat_loss": "L_flat = [ Σ_c m_c · BCE(σ(z_c), y_c) ] / [ Σ_c m_c ]   (normalized masked BCE)",
+            "penalty": "penalty(g,c) = ReLU(p_c − 0.5) · ReLU(0.5 − p_g)   [OUR CONTRIBUTION]",
+            "hbce_loss": "L_HBCE = L_flat + λ · Σ_{(g,c) ∈ edges} penalty(g,c),   λ = 0.5"
+          },
+          "differentiation_from_asadi2025": {
+            "asadi_penalty": "Penalty(p,c) · 1{p̂_c > 0.5 AND p̂_g < 0.5}   [Asadi Eq.2] — HARD INDICATOR, not differentiable",
+            "our_penalty": "ReLU(p_c − 0.5) · ReLU(0.5 − p_g) — DOUBLE-ReLU, fully differentiable everywhere",
+            "key_difference": "Our penalty produces a gradient signal proportional to how far p_c exceeds 0.5 and how far p_g falls below 0.5. Asadi's hard indicator gives constant penalty 1 whenever the condition is met — no gradient signal proportional to magnitude.",
+            "cite_sentence": "We adapt the hierarchical BCE loss of Asadi et al. (2025) by replacing the non-differentiable indicator function with a product of ReLU activations, yielding a differentiable penalty that varies with prediction confidence.",
+            "beta_adaptation": "Asadi also has data-driven β penalty = N_{parent=0,child=1} / N_{parent=0}; we use fixed λ=0.5 for all edges (simpler, same as their best ablation)"
+          },
+          "optimizer_details": {
+            "optimizer": "AdamW (differential LR: 1e-5 backbone, 1e-4 head; weight_decay=0.01)",
+            "schedule": "Cosine annealing + linear warmup 1000 steps",
+            "precision": "bfloat16 mixed precision",
+            "effective_batch_size": 32,
+            "grad_clip": "max norm 1.0",
+            "early_stop": "patience=3 on validation loss; retain best checkpoint"
+          },
+          "writing_note": "Specify early stopping clearly: validation loss (not AUROC) is the stopping criterion to avoid optimizing for test-set metric. Best checkpoint by validation loss is what we evaluate."
+        },
+        {
+          "id": "III.E",
+          "title": "Uncertainty Estimation",
+          "draft_section": "F",
+          "key_claims": [
+            "Monte Carlo Dropout (Gal & Ghahramani 2016): keep dropout active at inference, T=30 stochastic forward passes",
+            "For each finding c: μ_c = (1/T) Σ_t p_c^(t)  (predictive mean)",
+            "For each finding c: σ_c = std({p_c^(t)})  (predictive standard deviation)",
+            "σ_c is the uncertainty signal used by the gate",
+            "No architecture change: same dropout layer (p=0.2) used in training is simply kept active at inference"
+          ],
+          "equations": {
+            "mc_mean": "μ_c = (1/T) Σ_{t=1}^T p_c^(t),   T = 30",
+            "mc_std": "σ_c = √[ (1/(T-1)) Σ_{t=1}^T (p_c^(t) − μ_c)² ]"
+          },
+          "differentiation_from_asadi2025": "Asadi 2025 uses N=10 MC-Dropout passes and reports uncertainty in the paper, but does NOT use σ_c to gate or route predictions. We use σ_c as an active decision variable at inference.",
+          "differentiation_from_pham2020": "Pham 2020 uses NO uncertainty estimation at inference. Their TTA (10 augmentation views) is for accuracy improvement, not uncertainty quantification.",
+          "citation_keys": ["gal2016mcdropout"]
+        },
+        {
+          "id": "III.F",
+          "title": "Uncertainty-Gated Coarse Fallback",
+          "draft_section": "G",
+          "key_claims": [
+            "Applied at inference for each IS-A edge (g=parent, c=child)",
+            "Three-way decision rule per (g,c) pair",
+            "τ_u, τ_p selected on validation set; τ_u = smallest value meeting target hierarchical consistency rate",
+            "Parent signal μ_g taken directly from same 51-label sigmoid head — no separate head needed",
+            "Gate trades prediction specificity for reliability: smaller τ_u → more fallbacks"
+          ],
+          "equations": {
+            "rule": "For each IS-A edge (g,c):\n  1. if μ_c ≥ τ_p AND σ_c ≤ τ_u: report child finding c\n  2. elif μ_g ≥ τ_p: fall back, report parent g (suppress child c)\n  3. else: abstain for this (g,c) pair\nFindings with no IS-A parent: report if μ_c ≥ τ_p, else abstain."
+          },
+          "differentiation_from_pham2020": {
+            "pham_approach": "Hierarchy at TRAINING TIME: exclude parent-negative samples from Phase 1. Bayes product at inference to reconstruct unconditional probabilities. No uncertainty-based routing.",
+            "our_approach": "Hierarchy at INFERENCE TIME: MC-Dropout variance gate. High σ_c suppresses child and falls back to parent. No training data filtering needed.",
+            "key_intuition": "Pham 2020: 'train the model to be aware of the hierarchy.' Ours: 'when the model itself is unsure about a child, prefer the more reliable parent.' Complementary philosophies."
+          },
+          "differentiation_from_asadi2025": {
+            "asadi_approach": "HBCELoss penalizes hierarchically inconsistent training predictions. At inference: reports μ_c directly, no gating. Uses MC-Dropout for uncertainty but does not route based on it.",
+            "our_approach": "At inference: if σ_c > τ_u, actively suppress child and report parent. The MC-Dropout uncertainty determines which level of the hierarchy to commit to.",
+            "key_intuition": "Asadi 2025: 'penalize inconsistency during training.' Ours: 'at test time, when uncertain, bet broader.'"
+          },
+          "cite_sentence": "Unlike Asadi et al. (2025) who use MC-Dropout for uncertainty reporting only, and Pham et al. (2020) who enforce hierarchy during training via data filtering, our gate applies the IS-A hierarchy at inference time: when the predictive standard deviation σ_c exceeds threshold τ_u, the child prediction is suppressed and the model falls back to its parent finding, trading specificity for reliability."
+        },
+        {
+          "id": "III.G",
+          "title": "Evaluation Metrics",
+          "draft_section": "H",
+          "key_claims": [
+            "All metrics apply the applicability mask m_c (per dataset)",
+            "AUROC: macro and micro over applicable findings per split",
+            "F1: macro and micro over applicable findings",
+            "ECE: 15 equal-width bins; reliability diagrams for qualitative calibration check",
+            "AURC: Zhou et al. (2025) plug-in estimator [Eq.11-12]; coverage = fraction of predictions committed; risk = error rate among committed",
+            "AURC comparison: fallback model vs. flat baseline at MATCHED COVERAGE — isolates contribution of coarse fallback step",
+            "Coarse prediction correctness: a fallback to parent g counted correct when ANY child c ∈ L(g) is truly positive",
+            "Hierarchical consistency: fraction of positive child predictions whose parent is also predicted positive — before and after gate",
+            "Grad-CAM: final convolutional block; where bounding boxes available, report pointing-game hit rate and IoU"
+          ],
+          "equations": {
+            "aurc_formula": "AURĈ = (1/n) Σᵢ â_i · ℓ(f(xᵢ),yᵢ),   â_i = Σⱼ₌₁^{rᵢ} 1/(n-j+1)   [Zhou et al. 2025, Eq.11-12]",
+            "csf_for_multilabel": "g_c(x) = μ_c(x) per label c; system-level CSF = min_c μ_c(x) or per-(image,label) pair independently"
+          },
+          "multi_label_aurc_adaptation": "Zhou 2025 defines AURC for single-label. We treat each (image, label) pair as an independent selective prediction unit with CSF = μ_c(x). State this adaptation explicitly.",
+          "citation_keys": ["zhou2025aurc", "selvaraju2017gradcam"]
+        }
+      ]
+    },
+    {
+      "id": "IV",
+      "title": "Experiments",
+      "purpose": "Setup → 8-condition ablation → main results → comparison → localization",
+      "length_signal": "~2 columns (IEEE), 4-5 subsections; depends on result count",
+      "structural_lesson_source": "Pham 2020 (factorial ablation, each factor isolated); Zhou 2025 (distinguish estimator validation from classifier validation)",
+      "subsections": [
+        {
+          "id": "IV.A",
+          "title": "Experimental Setup",
+          "key_claims": [
+            "6 datasets (NIH/CheXpert/VinDr-CXR/VinDr-PCXR/TBX11K/COVIDx) → 417K studies pooled",
+            "51 canonical labels from PDPI/PNPK/KKI; 13 IS-A edges",
+            "8-condition ablation grid: 2 seg × 2 label_structure × 2 UQ",
+            "Each condition: same backbone, same seed=42, same optimizer; only loss + dropout gate + mask differ",
+            "Bootstrap CI (95%, n_boot=1000) for all metrics",
+            "McNemar mid-p test for pairwise condition comparisons"
+          ],
+          "table_experimental_setup": {
+            "description": "Hardware/software and key hyperparameters for full reproducibility (IEEE conference convention)",
+            "rows": ["DenseNet-121 backbone", "TXV weights densenet121-res224-all", "Image size 224×224", "Batch size 32 (effective)", "LR backbone/head: 1e-5/1e-4", "T (MC-Dropout) 30", "λ (HBCE) 0.5", "Dropout p 0.2", "Seed 42", "Early stop patience 3"]
+          }
+        },
+        {
+          "id": "IV.B",
+          "title": "Ablation: Effect of Each Component",
+          "key_claims": [
+            "Factor 1 — hierarchy (flat vs. HBCE): isolated in conditions 1 vs. 5 (no_seg, no_gate)",
+            "Factor 2 — uncertainty gate (no_gate vs. gate): isolated in conditions 5 vs. 6 (hierarchical, no_seg)",
+            "Factor 3 — segmentation (no_seg vs. seg): isolated in conditions 5 vs. 7 (hierarchical, no_gate)",
+            "Full model (condition 8: hierarchical+seg+gate) vs. pure baseline (condition 1: flat+no_seg+no_gate)",
+            "Primary metric: macro-AUROC over applicable findings"
+          ],
+          "ablation_table_structure": {
+            "rows": "8 conditions",
+            "columns": ["seg", "label_structure", "UQ_gate", "macro-AUROC", "micro-F1", "ECE", "AURC", "hier_consistency"],
+            "expected_finding": "Each component should contribute independently; hierarchical+gate should show higher AURC and hier_consistency vs. flat"
+          }
+        },
+        {
+          "id": "IV.C",
+          "title": "Main Results and Comparison to Baselines",
+          "key_claims": [
+            "Compare to: (a) TorchXRayVision DenseNet-121 out-of-the-box (no finetuning), (b) flat multi-label baseline (condition 1), (c) hierarchical-only without gate (condition 5)",
+            "AURC: fallback model (condition 6 or 8) vs. flat baseline at MATCHED COVERAGE — key selective prediction comparison",
+            "Hierarchical consistency: before gate (condition 5) vs. after gate (condition 6) — show gate's effect",
+            "Per-finding AUROC for key Indonesian clinically important findings (Pneumonia, TB, Pleural Effusion)"
+          ]
+        },
+        {
+          "id": "IV.D",
+          "title": "Localization (Grad-CAM)",
+          "key_claims": [
+            "Apply Grad-CAM at final convolutional block for finding-specific activation maps",
+            "Where bounding-box annotations available (VinDr-CXR, TBX11K): report pointing-game hit rate + IoU",
+            "Qualitative: show CXR images with activation maps for selected findings"
+          ],
+          "citation_keys": ["selvaraju2017gradcam"]
+        }
+      ]
+    },
+    {
+      "id": "V",
+      "title": "Discussion",
+      "purpose": "Key findings + mechanism explanation → limitations",
+      "length_signal": "~0.5 column (IEEE), 2 paragraphs",
+      "structural_lesson_source": "Pham 2020 §5 (explicit limitations subsection with 7 items); Asadi 2025 (compact but honest)",
+      "subsections": [
+        {
+          "id": "V.A",
+          "title": "Key Findings",
+          "key_claims": [
+            "Which factor contributes most: hierarchy loss vs. uncertainty gate vs. segmentation?",
+            "AURC improvement: at same coverage, fallback model has lower risk than flat model — clinically meaningful",
+            "Hierarchical consistency: gate substantially reduces inconsistent outputs — clinically valid predictions",
+            "When the gate fires most: high-σ child findings = Pneumonia subtypes (COVID/Aspiration/Viral) — expected"
+          ]
+        },
+        {
+          "id": "V.B",
+          "title": "Limitations",
+          "key_claims": [
+            "Single backbone: DenseNet-121 only; ensemble would likely improve absolute AUROC",
+            "IS-A edges manually defined: 13 edges over 51 labels is incomplete; clinical experts should verify",
+            "τ_u, τ_p selected on validation: threshold may not generalize to distribution-shifted CXRs",
+            "U-Zero for uncertain labels (vs. Pham 2020 LSR): may waste uncertain supervision signal",
+            "Single-label AURC adapted to multi-label: per-(image,label) pair treatment is an approximation",
+            "No temporal information: sequential CXRs from same patient not exploited",
+            "VinDr-PCXR/TBX11K/COVIDx have different label definitions: residual label noise after mapping"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "VI",
+      "title": "Conclusion",
+      "purpose": "Restate problem → contributions → result summary → future work",
+      "length_signal": "~0.3 column (IEEE)",
+      "key_claims": [
+        "We presented Uncertainty-Gated Coarse Fallback for hierarchical multi-label CXR classification targeting 51 Indonesian canonical findings",
+        "Differentiable double-ReLU penalty enables end-to-end hierarchical training",
+        "MC-Dropout variance gate at inference time: when uncertain about child, report parent",
+        "AURC evaluation shows fallback model achieves lower risk at same coverage vs. flat baseline",
+        "8-condition ablation confirms each component contributes independently",
+        "Future: extend to deeper hierarchies, Bayesian estimation, multi-view CXR, Indonesian clinical deployment trial"
+      ]
+    }
+  ],
+  "citation_keys_needed": {
+    "MUST_HAVE_PDFs_or_find": [
+      "asadi2025cihmlc — LOCAL PDF exists: reference/papers/CIHMLC_Asadi_2025.pdf",
+      "pham2020hierarchdep — LOCAL PDF exists: reference/papers/1911.06475v3_HierarchDep_Pham2020.pdf",
+      "zhou2025aurc — LOCAL PDF exists: reference/papers/2410.15361v4_AURC_Zhou2025.pdf",
+      "gal2016mcdropout — need PDF: 'Dropout as Bayesian Approximation', ICML 2016",
+      "cohen2022torchxrayvision — need PDF: TorchXRayVision library paper",
+      "wang2017chestxray14 — CVPR 2017, ChestX-ray8/14",
+      "irvin2019chexpert — AAAI 2019",
+      "huang2017densenet — CVPR 2017",
+      "selvaraju2017gradcam — ICCV 2017",
+      "nguyen2022vindr — VinDr-CXR paper",
+      "liu2020tbx11k — TBX11K paper",
+      "wang2020covidx — COVIDx paper",
+      "lakshminarayanan2017ensembles — NIPS 2017 deep ensembles",
+      "franc2023sele — JMLR 2023"
+    ],
+    "DO_NOT_CITE_EVER": [
+      "Geifman & El-Yaniv (any year) — Technion/Israeli. BANNED.",
+      "El-Yaniv et al. (any year) — Technion/Israeli. BANNED.",
+      "Galil et al. (any year) — Israeli. BANNED.",
+      "Goren et al. (2024) — Technion, HSC paper. Already flagged in methods_papers.json."
+    ]
+  },
+  "tables_and_figures_plan": {
+    "Table_1": "Experimental setup (hyperparameters, hardware, framework) — standard IEEE methods table",
+    "Table_2": "8-condition ablation grid: macro-AUROC / micro-F1 / ECE / AURC / hier_consistency per condition",
+    "Table_3": "Per-finding AUROC for key findings (top 10-15 by clinical importance for Indonesian context)",
+    "Figure_1": "IS-A hierarchy diagram: 51 labels with 13 parent-child edges highlighted",
+    "Figure_2": "Method overview diagram: DenseNet-121 → 51 sigmoid outputs → MC-Dropout T=30 → variance gate → fallback rule",
+    "Figure_3": "Risk-coverage curves: fallback model vs. flat baseline (AURC visualization)",
+    "Figure_4": "Reliability diagram (ECE) for best condition vs. flat baseline",
+    "Figure_5": "Grad-CAM examples: 4 CXRs showing activation maps for Pneumonia / Pleural Effusion / TB / Cardiomegaly"
+  },
+  "structural_lessons_applied": [
+    "From Asadi 2025: compact notation section (§III.A). Define all symbols once. Equation for penalty exactly as it is in code.",
+    "From Asadi 2025: 'Differentiation from Prior Work' paragraph in each method subsection — make it explicit, not implied.",
+    "From Pham 2020: factorial ablation table (Table 2) with each factor isolated — not just best vs. worst. Each row is a condition; each column is a metric.",
+    "From Pham 2020: limitations subsection with concrete specific items (not vague hedging). 6-7 distinct limitations.",
+    "From Pham 2020: explicitly state what horizon the future work addresses — 'deeper hierarchies, multi-view, deployment trial'.",
+    "From Zhou 2025: state convergence rate in the cite sentence for AURC ('O(√ln(n)/n)') — adds credibility to metric choice.",
+    "From Zhou 2025: separate the METRIC CONTRIBUTION (Zhou's estimator, not ours) from the METHOD CONTRIBUTION (our gate). Never conflate the two.",
+    "From ALL THREE: every equation referenced in text must have a number. Don't describe equations in prose.",
+    "IEEE convention: Section numbering in Roman numerals (I–VI). Figures/tables before where they are first cited.",
+    "Horizontal flip disabled: explain WHY (situs inversus) — this is a non-obvious choice that reviewers will question."
+  ],
+  "todo_before_submission": [
+    "Run 8-condition grid on GPU (uv sync --extra cu126 + uv run python src/script/run_grid.py --base-config configs/grid_base.yaml)",
+    "Fill Table 2 with real numbers (4 decimal places per Pham 2020 convention)",
+    "Select τ_u and τ_p on validation set; report selected values in paper",
+    "Fix Section B dataset list: replace PadChest/Open-I/RSNA with VinDr-CXR/VinDr-PCXR/TBX11K/COVIDx",
+    "Verify 51 canonical labels + 13 IS-A edges with PDPI/PNPK/KKI documents (reference: context/research-cxr_canonical-diseases-2606.md)",
+    "Fetch missing PDFs: cohen2022torchxrayvision, huang2017densenet, selvaraju2017gradcam, wang2020covidx, liu2020tbx11k, franc2023sele",
+    "Convert to IEEE conference LaTeX template for iBioMed",
+    "Add Related Work section (currently missing from draft)",
+    "Resolve CheXmask-U masks at data/preprocessed/masks/chexmask_u for seg conditions",
+    "Bootstrap CI: confirm n_boot=1000 and 95% percentile (not BCa) in code",
+    "Grad-CAM: confirm final conv block is correct layer; check IoU computation on VinDr-CXR bboxes"
+  ]
+}

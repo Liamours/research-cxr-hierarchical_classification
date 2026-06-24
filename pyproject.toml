@@ -1,0 +1,82 @@
+[project]
+name = "research-cxr"
+version = "0.1.0"
+description = "Chest X-ray AI research"
+requires-python = ">=3.11"
+dependencies = [
+    "torchxrayvision>=1.0.0",
+    "pillow>=11.0.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "scikit-learn>=1.5.0",
+    "scipy>=1.13.0",
+    "matplotlib>=3.9.0",
+    "tqdm>=4.67.0",
+    "pyyaml>=6.0",
+    "pydicom>=3.0.2",
+    "pylibjpeg>=2.1.0",
+    "pylibjpeg-libjpeg>=2.4.0",
+]
+
+# torch/torchvision are NOT in [dependencies] above; pick one per device with an
+# extra: `uv sync --extra cu128` (RTX 4050 Ada AND RTX 5070 Blackwell, recent driver),
+# `--extra cu126` (older CUDA driver), or `--extra cpu` (no GPU / CI). See
+# document/device_setup-2606.md. torch 2.7 is the lowest version on both cu126 and
+# cu128 indexes, so a single pin works across all three extras.
+[project.optional-dependencies]
+cpu = ["torch>=2.7.0", "torchvision>=0.22.0"]
+cu126 = ["torch>=2.7.0", "torchvision>=0.22.0"]
+cu128 = ["torch>=2.7.0", "torchvision>=0.22.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.uv]
+# The three GPU/CPU extras are mutually exclusive (one torch build per sync).
+conflicts = [[{ extra = "cpu" }, { extra = "cu126" }, { extra = "cu128" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu128", extra = "cu128" },
+]
+torchvision = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu128", extra = "cu128" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q -m 'not slow'"
+markers = [
+    "slow: training / loader / overfit tests (run with: uv run pytest -m slow)",
+]
+
+[tool.coverage.run]
+omit = ["*archive*", "src/script/*", "tests/*"]
+

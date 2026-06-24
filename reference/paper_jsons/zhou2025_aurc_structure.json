@@ -1,0 +1,425 @@
+{
+  "meta": {
+    "key": "zhou2025aurc",
+    "title": "A Novel Characterization of the Population Area Under the Risk Coverage Curve (AURC) and Rates of Finite Sample Estimators",
+    "arxiv": "2410.15361v4",
+    "venue": "Proceedings of the 42nd International Conference on Machine Learning (ICML 2025), Vancouver, Canada. PMLR 267. Copyright 2025 by the author(s).",
+    "year": 2025,
+    "pages_total": 28,
+    "pages_main": "1-10",
+    "pages_appendix": "S12-S28 (17 appendix pages)",
+    "format": "ICML (double-column, 10-page main + Impact Statement + References + Appendix)",
+    "institution": {
+      "1": "Processing Speech and Images, Department of Electrical Engineering, KU Leuven, Belgium",
+      "2": "Instabase, San Francisco, USA"
+    },
+    "authors": ["Han Zhou¹", "Jordy Van Landeghem²", "Teodora Popordanoska¹", "Matthew B. Blaschko¹"],
+    "correspondence": "Han Zhou <han.zhou@esat.kuleuven.be>",
+    "funding": "Flemish Government AI Research Program + FWO (G0G2921N). HZ supported by China Scholarship Council. EuroHPC JU project EHPC-BEN-2024B10-050 and EHPC-BEN-2025B22-037 (LEONARDO via CINECA, Italy).",
+    "code": "https://github.com/han678/AsymptoticAURC",
+    "local_pdf": "reference/papers/2410.15361v4_AURC_Zhou2025.pdf",
+    "headline_result": "Plug-in AURC estimator converges at rate O(√ln(n)/n); empirically lower bias than SELE across all tested CSFs, datasets, and architectures. Also proves 2×SELE is NOT always an upper bound of empirical AURC.",
+    "relevance_to_our_paper": "We use their plug-in estimator (Eq.11-12) to compute AURC for our uncertainty-gated hierarchical fallback model. Cite in evaluation section. Key formula: â_i = Σ_{j=1}^{r_i} 1/(n-j+1). This is a safe citation — KU Leuven/Instabase, NOT Israeli institutions."
+  },
+  "critical_corrections_vs_prior_json": [
+    "SELE misdescribed as 'lower bound of empirical AURC' — paper DISPROVES this: provides counterexample (Appendix A.2, Eq.34-36) showing AURC > 2×SELE is possible. Franc et al. 2023 Theorem 8 is incorrect.",
+    "AURC_p (Eq.3 original form) vs AURC_a (Eq.8 reweighted form) conflated — these are DISTINCT but EQUIVALENT expressions. AURC_p is the original; AURC_a is the new equivalent form derived via Prop 3.1. The plug-in estimator (Eq.11) estimates AURC_a = AURC_p.",
+    "α(x) in Eq.4 is defined via conditional expectation (complex); Prop 3.1 proves the simpler Eq.7: α(x) = -ln(1-G(x)). These are equivalent but different equations — first JSON conflated them.",
+    "'El-Yaniv 2010' for AURC original is slightly wrong: El-Yaniv et al. 2010 (JMLR) is the foundational selective classification paper. AURC as a metric came from Geifman & El-Yaniv 2017 'Selective classification for deep neural networks'. BOTH are Israeli (Technion) — DO NOT CITE in our paper.",
+    "Missing: the SELE formula from Appendix A.2 (Eq.32-33): Δ_sele = (1/n²) Σᵢ Σⱼ ℓ(f(xᵢ),yᵢ) 1[g(xᵢ) ≥ g(xⱼ)] = Σᵢ (rᵢ/n²) ℓ(f(xᵢ),yᵢ). SELE weight: â^se_i = rᵢ/n.",
+    "Missing: code repo URL https://github.com/han678/AsymptoticAURC and footnote 2 for torch-uncertainty O(n ln n) implementation https://github.com/ENSTA-U2IS-AI/torch-uncertainty.",
+    "Missing: CSF table (Table S2 appendix) listing all 6 post-hoc CSFs with exact equations.",
+    "Missing: Appendix propositions A.1 (consistency), A.2 (SELE bias), A.3 (MSE of â'_i), A.4 (average MSE bound).",
+    "Missing: training experiment details — LR=1e-3, batch=128, 30 epochs, CE loss, MSP as CSF.",
+    "Missing: Bayesian model extension (Appendix A.3): E_{f~P(f|D)}[AURC(f)] = E_x[E_{f~P(f|D)}[R(f,g) | τ=g(x)]] via Fubini.",
+    "The â'_i estimator note is correct that it lower-bounds â_i, but should be more precise: â'_i < â_i always (by Jensen's inequality applied to the convex function -ln(1-t)), and â'_i is a CONSISTENT LOWER-BOUND plug-in estimator.",
+    "AUGRC reference: Traub et al. (2024) is at NeurIPS 2024 ('Overcoming common flaws in the evaluation of selective classification systems') — not just 'Traub 2024' without venue."
+  ],
+  "abstract": {
+    "purpose": "~200-word ICML abstract: problem → contributions → theoretical guarantee → empirical validation",
+    "verbatim_key_sentences": [
+      "The selective classifier (SC) has been proposed for rank based uncertainty thresholding, which could have applications in safety critical areas such as medical diagnostics, autonomous driving, and the justice system.",
+      "The Area Under the Risk-Coverage Curve (AURC) has emerged as the foremost evaluation metric for assessing the performance of SC systems.",
+      "In this work, we present a formal statistical formulation of population AURC, presenting an equivalent expression that can be interpreted as a reweighted risk function.",
+      "Through Monte Carlo methods, we derive empirical AURC plug-in estimators for finite sample scenarios.",
+      "The weight estimators associated with these plug-in estimators are shown to be consistent, with low bias and tightly bounded mean squared error (MSE).",
+      "The plug-in estimators are proven to converge at a rate of O(√(ln(n)/n)) demonstrating statistical consistency.",
+      "We empirically validate the effectiveness of our estimators through experiments across multiple datasets, model architectures, and confidence score functions (CSFs), demonstrating consistency and effectiveness in fine-tuning AURC performance."
+    ],
+    "writing_note": "Theory paper abstract: explicitly states convergence rate (O notation). Motivates via safety-critical domains. Two contributions clearly separated: formal characterization + plug-in estimators. Matches our framing: we cite AURC for medical CXR which is listed as a safety-critical application."
+  },
+  "sections": [
+    {
+      "id": "1",
+      "title": "Introduction",
+      "purpose": "Motivate selective classifiers → AURC as evaluation metric → identify gap in existing estimators → contributions",
+      "length_signal": "~2.5 columns (ICML double-column), ~7 paragraphs",
+      "subsections": [
+        {
+          "id": "1.para1",
+          "role": "Selective classifiers motivation",
+          "verbatim_key_claims": [
+            "Safety-critical scenarios: autonomous driving, medical diagnostics, justice system",
+            "Selective classifiers (SC) for rank-based uncertainty thresholding: withhold predictions under uncertainty",
+            "Selective classifiers employ cost-based models with reject region to balance risks of wrong predictions vs. non-decision costs",
+            "Goal: minimize expected misclassification costs (selective risk) while maximizing coverage"
+          ],
+          "citation_keys_from_paper": ["Berk2021 fairness/justice", "Leibig2022 breast cancer AI", "Dvijotham2023 AI-enabled diagnosis", "Franc2023 SELE", "Groh2024 skin disease"]
+        },
+        {
+          "id": "1.para2-3",
+          "role": "AURC as established metric + gap identification",
+          "verbatim_key_claims": [
+            "AURC and E-AURC (Geifman et al. 2019 — NOTE: Israeli, cannot cite in our paper) are most prevalent evaluation metrics",
+            "Most studies compute AURC as finite-sample empirical proxy WITHOUT examining finite-sample statistical properties",
+            "SELE (Franc et al. 2023): lower bound of empirical AURC, designs to optimize uncertainty scores",
+            "SELE motivated as 'close approximation of AuRC and amenable to optimization' — Zhou 2025 REFUTES this: 2×SELE is NOT always an upper bound of empirical AURC",
+            "Zhou 2025 shows: direct AURC estimation (without lower-bound approximation) is equally amenable to optimization"
+          ],
+          "warning": "Geifman et al. (2019) = Technion = Israeli institution. Zhou 2025 cites them but WE cannot."
+        },
+        {
+          "id": "1.para4-5",
+          "role": "Contributions (4 numbered)",
+          "verbatim_key_claims": [
+            "1. Formal statistical definition: population AURC_p (Eq.3) = integral form; equivalent AURC_a (Eq.8) = E[α(x)ℓ(f(x),y)] where α(x) = -ln(1-G(x))",
+            "2. Two plug-in estimators via Monte Carlo: weight â_i (harmonic number) and â'_i (simpler log formula)",
+            "3. Statistical properties: consistency (Prop A.1), bias (Prop 3.3, 3.4, A.2), MSE (Prop 3.5, A.3, A.4), convergence O(√ln(n)/n) (Prop 3.6)",
+            "4. Empirical validation: both plug-ins beat SELE across architectures (VGG/ResNet/WideResNet/ViT/Swin/BERT/RoBERTa), datasets (CIFAR10/100, ImageNet, Amazon), and all 6 CSFs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "title": "Related Work",
+      "purpose": "Survey AURC metrics + uncertainty estimation CSFs",
+      "length_signal": "~1 column (ICML), 2 paragraphs",
+      "subsections": [
+        {
+          "id": "2.A",
+          "title": "Evaluation Metrics",
+          "verbatim_key_claims": [
+            "AURC + E-AURC (Geifman et al. 2019 — Israeli, cannot cite): most prevalent SC evaluation metrics",
+            "MinMaxAURC (Cattelan & Silva 2024, UAI): min-max scaled version of AURC for monotonic relationship with AURC",
+            "AUGRC (Traub et al. 2024, NeurIPS): Generalized Risk Coverage curve, covers non-accepted predictions (undetected failures); measures system reliability beyond selective risk",
+            "GAP/limitation: all metrics computed as finite-sample proxies; no formal population AURC definition had existed before this work"
+          ],
+          "note_on_AUGRC": "AUGRC (Traub NeurIPS 2024) is a SAFE citation (German institution, German Cancer Research Center). Worth citing alongside AURC if our paper discusses abstention behavior on non-hierarchical conditions."
+        },
+        {
+          "id": "2.B",
+          "title": "Uncertainty Estimation / Confidence Score Functions",
+          "verbatim_key_claims": [
+            "CSFs fall into two categories: ensemble approaches vs. post-hoc methods",
+            "Ensemble methods: MC-Dropout (Gal & Ghahramani 2016), deep ensembles (Lakshminarayanan et al. 2017), batch-norm uncertainty (Teye et al. 2018)",
+            "Recent work: ensembles may NOT be crucial for uncertainty estimation — improve predictions but not uncertainty scores (Cattelan & Silva 2024; Xia & Bouganis 2022)",
+            "Post-hoc CSFs use model logits/probabilities WITHOUT additional forward passes",
+            "Popular post-hoc methods: MSP, MaxLogit, Softmax Margin, MaxLogit-ℓ2 norm, Negative Entropy, Negative Gini Score",
+            "This paper: MSP used as default CSF for experiments; evaluates ALL 6 post-hoc CSFs in §4 + appendix"
+          ],
+          "citation_keys": ["gal2016mcdropout", "lakshminarayanan2017ensembles", "hendrycks2022maxlogit", "belghazi2021maxlogit"],
+          "csf_table_S2": {
+            "source": "Appendix Table S2",
+            "CSFs": [
+              {"method": "MSP", "equation": "g(z) = max_i^K p_i  (maximum softmax probability)"},
+              {"method": "MaxLogit", "equation": "g(z) = max_i^K z_i  (maximum raw logit)"},
+              {"method": "Softmax Margin", "equation": "g(z) = p_i - max_{j≠i} p_j  where i = argmax_i^K p_i"},
+              {"method": "Negative Entropy", "equation": "g(z) = Σ_i^K z_i log z_i  (negative entropy of softmax probs)"},
+              {"method": "MaxLogit-ℓ_p Norm", "equation": "g(z) = ||z||_p  (ℓp norm of logit vector)"},
+              {"method": "Negative Gini Score", "equation": "g(z) = -1 + Σ_i^K p_i²  (Gomes et al. 2022)"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "title": "Performance Evaluation of Selective Classifiers",
+      "purpose": "Mathematical core: define population AURC → derive equivalent α(x)-reweighted form → propose plug-in estimators → prove statistical properties",
+      "length_signal": "~4.5 columns (ICML), the main technical contribution",
+      "subsections": [
+        {
+          "id": "3.1",
+          "title": "Problem Setting",
+          "verbatim_key_claims": [
+            "Input space X ⊆ ℝ^d, label space Y ⊆ {0,1}^k",
+            "Unknown joint distribution P(x,y) over X × Y",
+            "Classifier f: X → Δ^k (k-dimensional probability simplex)",
+            "CSF g: X → [0,1] (confidence score; higher = more confident)",
+            "Selection function: g̃(x) = 1[g(x) ≥ τ] for threshold τ ∈ ℝ",
+            "Selective system (f,g) at input x: predict f(x) if g(x) ≥ τ, else 'abstain' [Eq.1]",
+            "Loss function ℓ: Δ^k × Y → ℝ",
+            "True risk of f: R(f) = E_{P(x,y)}[ℓ(f(x),y)]",
+            "Empirical risk: R̂(f) = (1/n) Σᵢ ℓ(f(xᵢ),yᵢ)"
+          ],
+          "equations": {
+            "selective_system": "(f,g)(x) = f(x)  if g(x) ≥ τ;  'abstain'  otherwise   [Eq.1]",
+            "selective_risk": "R(f,g̃) = E_{P(x,y)}[ℓ(f(x),y)g̃(x)] / E_{P(x)}[g̃(x)]   [Eq.2]"
+          }
+        },
+        {
+          "id": "3.2",
+          "title": "Evaluation Metrics (Risk-Coverage Curve)",
+          "verbatim_key_claims": [
+            "Coverage c(τ) = E_{P(x)}[g̃(x)]: fraction of population NOT rejected at threshold τ",
+            "Selective risk R(f,g̃): error rate among committed predictions",
+            "Risk-coverage (RC) curve: sweep τ from 0 to 1, plot selective risk R vs. coverage c",
+            "AURC = area under the RC curve (lower is better for better classifiers)",
+            "RC curve defined by El-Yaniv et al. 2010 (Israeli — do not cite in our paper)"
+          ],
+          "writing_note": "In our multi-label CXR setting: coverage = fraction of (image, label) pairs committed to; risk = error rate (1-F1 or 1-AUROC) among committed predictions. Need to state this adaptation explicitly in our evaluation section."
+        },
+        {
+          "id": "3.3",
+          "title": "Equivalent Expressions of AURC",
+          "verbatim_key_claims": [
+            "Original population AURC (Eq.3): integral over x̃ of E_{(x,y)~P}[ℓ(f(x),y)1[g(x) ≥ g(x̃)]] / E_{P(x)}[1[g(x') ≥ g(x̃)]]",
+            "Numerator expectation can be swapped outside → AURC_p(f) = E_{(x,y)~P}[α(x)ℓ(f(x),y)] [Eq.4]",
+            "where α(x) = E_{x̃~P(x)}[1[g(x) ≥ g(x̃)] / E_{x'~P(x)}[1[g(x') ≥ g(x̃)]]] [Eq.5]",
+            "Proposition 3.1: Define G(x) = Pr(g(x') ≤ g(x)) = ∫ 1[g(x') ≤ g(x)] dP(x') [Eq.6]",
+            "Then: α(x) = -ln(1-G(x)) [Eq.7]  — KEY INSIGHT",
+            "G(x) = CDF of CSF g evaluated at x: G(x) ∈ [0,1]",
+            "G(x) interpreted as: population rank percentile of sample x when sorted by confidence score g(x) in ascending order",
+            "Integral identity: ∫₀¹ -ln(1-z) dz = 1 [Eq.9] → average weight α(x) over population = 1",
+            "Definition 3.2: AURC_a(f) = ∫ α(x)ℓ(f(x),y) dP(x,y) [Eq.8] — equivalent to AURC_p(f)"
+          ],
+          "equations": {
+            "population_AURC_p": "AURC_p(f) = E_{(x,y)~P}[α(x)ℓ(f(x),y)]   [Eq.4]",
+            "alpha_def_Eq5": "α(x) = E_{x̃~P}[ 1[g(x)≥g(x̃)] / E_{x'~P}[1[g(x')≥g(x̃)]] ]   [Eq.5]",
+            "G_CDF": "G(x) = Pr(g(x') ≤ g(x)) = ∫ 1[g(x') ≤ g(x)] dP(x')   [Eq.6]",
+            "alpha_key": "α(x) = -ln(1 - G(x))   [Eq.7]  ← Proposition 3.1 result",
+            "AURC_a": "AURC_a(f) = ∫ α(x)ℓ(f(x),y) dP(x,y)   [Eq.8]  ← Definition 3.2",
+            "integral_identity": "∫₀¹ -ln(1-z) dz = 1   [Eq.9]"
+          },
+          "important_note": "AURC_p and AURC_a are EQUIVALENT (Definition 3.2 = Proposition 3.1 applied to Eq.4). AURC_a is the form used for plug-in estimation because G(x) can be estimated from the finite sample as a CDF."
+        },
+        {
+          "id": "3.4",
+          "title": "Plug-in Estimator of AURC",
+          "verbatim_key_claims": [
+            "Given finite sample D_n = {(xᵢ,yᵢ)}ᵢ₌₁ⁿ i.i.d. from P(x,y)",
+            "Naive empirical AURC (Eq.10): double sum, O(n²) computation",
+            "Plug-in estimator reformulates using rank r_i: O(n ln n) via single sort + cumulative sum [Eq.11-12]",
+            "r_i = rank of xᵢ in data sorted in ASCENDING order by CSF; larger r_i = higher CSF value = more confident",
+            "â_i shorthand for â_α(xᵢ) = the finite-sample plug-in estimate of α(xᵢ)",
+            "â_i is a CONSISTENT estimator of α(xᵢ) by Continuous Mapping Theorem (Prop A.1)",
+            "Average weight: (1/n)Σâ_i = 1 [Eq.14] → plug-in can be viewed as redistribution of risk"
+          ],
+          "equations": {
+            "empirical_AURC_naive": "AURC_p̂(f) = (1/n) Σⱼ₌₁ⁿ [ (1/n) Σᵢ₌₁ⁿ ℓ(f(xᵢ),yᵢ) 1[g(xᵢ) ≥ g(xⱼ)] ] / [ (1/n) Σₖ₌₁ⁿ 1[g(xₖ) ≥ g(xⱼ)] ]   [Eq.10]",
+            "plugin_estimator": "AURĈ_p(f) = (1/n) Σᵢ₌₁ⁿ â_i ℓ(f(xᵢ),yᵢ)   [Eq.11]",
+            "plugin_weight": "â_i = Σⱼ₌₁ⁿ 1[g(xⱼ) ≤ g(xᵢ)] / Σₖ₌₁ⁿ 1[g(xₖ) ≥ g(xⱼ)] = Σⱼ₌₁^{rᵢ} 1/(n-j+1)   [Eq.12]",
+            "harmonic_form": "â_i = H_n - H_{n-rᵢ} = ψ(n+1) - ψ(n-rᵢ+1)   [Eq.13]",
+            "average_weight": "(1/n) Σᵢ₌₁ⁿ â_i = (1/n) Σᵢ₌₁ⁿ (H_n - H_{n-i}) = 1   [Eq.14]"
+          },
+          "computation": "O(n ln n): sort once (n ln n) then compute cumulative harmonic sum (n). Much better than O(n²) naive.",
+          "code_reference": "https://github.com/han678/AsymptoticAURC and torch-uncertainty package (footnote 2)",
+          "implementation_recipe": {
+            "step1": "Sort predictions by g(x) ASCENDING. Assign rank r_i (r=1 = least confident, r=n = most confident).",
+            "step2": "Compute â_i = Σⱼ₌₁^{rᵢ} 1/(n-j+1). Equivalently: cumulative_sum of [1/n, 1/(n-1), ..., 1/1] up to position r_i.",
+            "step3": "AURC = (1/n) Σᵢ â_i ℓ(f(xᵢ),yᵢ).",
+            "note": "The sum (1/n)Σâ_i = 1 is a useful sanity check."
+          }
+        },
+        {
+          "id": "3.5",
+          "title": "Alternate Derivation via Monte Carlo",
+          "verbatim_key_claims": [
+            "Monte Carlo approach: estimate G(x) by sampling β_i ~ Beta(r_i, n+1-r_i) [Eq.16]",
+            "β_i ~ Beta(r_i, n+1-r_i) has mean β_i = r_i/(r_i + n+1-r_i) = r_i/(n+1)",
+            "Taking expectation: â_i = E_{β_i}[-ln(1-β_i)] = H_n - H_{n-rᵢ} [same as Eq.13 via Eq.17]",
+            "Alternate weight: â'_i = -ln(1 - E_{β_i}[β_i]) = -ln(1 - r_i/(n+1)) [Eq.18]",
+            "â'_i ≤ â_i always (Jensen's inequality: -ln(1-t) is convex, so E[-ln(1-β)] ≥ -ln(1-E[β]))",
+            "â'_i is a CONSISTENT LOWER-BOUND plug-in estimator",
+            "Average: (1/n)Σâ'_i < 1 (approaches 1 as n→∞) [Eq.19]"
+          ],
+          "equations": {
+            "beta_distribution": "β_i ~ Beta(r_i, n+1-r_i)  [Eq.16]  ← order statistics of uniform distribution",
+            "alternate_weight": "â'_i = -ln(1 - r_i/(n+1))   [Eq.18]"
+          },
+          "writing_note": "â'_i is the SIMPLER formula (one line, no harmonic numbers). â_i requires H_n computation. Both converge; â_i has tighter MSE bounds theoretically. For implementation, â'_i is easier: just -log(1 - rank/(n+1))."
+        },
+        {
+          "id": "3.6",
+          "title": "Statistical Properties",
+          "verbatim_key_claims": [
+            "Both â_i and â'_i are BIASED in finite samples (Prop 3.3, 3.4) — bias vanishes as n→∞",
+            "SELE weight â^se_i = r_i/n exhibits LARGER bias than â_i or â'_i (Fig.1)",
+            "Bias is positive for small β_i (low-confidence samples) and negative for large β_i, decreasing with n",
+            "MSE(â_i) = ψ'(n+1-r_i) - ψ'(n+1) ≈ β_i / (n(1-β_i)+1) [Prop 3.5, Eq.23-24]",
+            "MSE(â'_i) ≈ β_i / (n(1-β_i)+1) also [Prop A.3] — same order as â_i",
+            "Average MSE: (1/n)Σᵢ MSE(â_i) = O(ln(n)/n) [Prop A.4] — tightly bounded",
+            "Prop 3.6 (KEY): Convergence rate of BOTH plug-in estimators = O(√ln(n)/n)"
+          ],
+          "propositions_from_paper": {
+            "Prop_3.3": "Bias(â_i | G(xᵢ)=βᵢ) = H_n - Σᵢ H_{n-i} C_{n-1}^{i-1} β^{i-1}(1-β)^{n-i} + ln(1-β)   [Eq.21]",
+            "Prop_3.4": "Bias(â'_i | G(xᵢ)=βᵢ) = -Σᵢ ln(1-i/(n+1)) C_{n-1}^{i-1} β^{i-1}(1-β)^{n-i} + ln(1-β)   [Eq.22]",
+            "Prop_3.5": "MSE(â_i) = ψ'(n+1-rᵢ) - ψ'(n+1) ≈ βᵢ / (n(1-βᵢ)+1)   [Eq.23-24]",
+            "Prop_3.6": "Plug-in estimators with â_i or â'_i converge at rate O(√(ln(n)/n))",
+            "Prop_A1": "â_i is consistent: lim_{n→∞} â_i = -ln(1-βᵢ) [Appendix A.1, Eq.27]",
+            "Prop_A2": "Bias(â^se_i | G(xᵢ)=βᵢ) = Σᵢ (i/n) C_{n-1}^{i-1} β^{i-1}(1-β)^{n-i} + ln(1-β)   [Eq.28] — SELE bias formula",
+            "Prop_A3": "MSE(â'_i) ≈ βᵢ / (n(1-βᵢ)+1)   [Eq.30]",
+            "Prop_A4": "(1/n) Σᵢ MSE(â_i) = O(ln(n)/n)   [Eq.31]"
+          },
+          "writing_note": "For our paper: DO NOT re-derive these. Simply state 'We use the plug-in estimator of Zhou et al. (2025, Eq.11-12) which converges at O(√ln(n)/n) and has lower bias than the SELE score.'"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "title": "Appendix A.2: SELE Score",
+      "purpose": "Define SELE formula and show 2×SELE is NOT a valid upper bound of empirical AURC",
+      "verbatim_key_claims": [
+        "SELE (Franc et al. 2023) formula: Δ_sele(f) = (1/n²) Σᵢ Σⱼ ℓ(f(xᵢ),yᵢ) 1[g(xᵢ) ≥ g(xⱼ)] [Eq.32]",
+        "Simplified: Δ_sele(f) = Σᵢ (rᵢ/n²) ℓ(f(xᵢ),yᵢ) [Eq.33] → weight â^se_i = rᵢ/n",
+        "SELE O(n²) naive but also O(n ln n) like plug-in (using same rank trick)",
+        "Franc et al. 2023 claim: 2×Δ_sele is an upper bound of empirical AURC [their Theorem 8]",
+        "THIS IS WRONG: Zhou 2025 provides counterexample with n=5 observations [Eq.34-36]",
+        "Counterexample: for 5 observations sorted by CSF, only last has nonzero loss: â_5 = H_5 - H_0 ≈ 2.2833 while 2â^se_5 = 2×(5/5) = 2. So AURC > 2×SELE. [Eq.35]",
+        "Reason Franc's proof fails: aᵢ/bᵢ sequence is not non-decreasing so Lemma 15 in their paper cannot be applied"
+      ],
+      "equations": {
+        "sele": "Δ_sele(f) = (1/n²) Σᵢ Σⱼ ℓ(f(xᵢ),yᵢ) 1[g(xᵢ) ≥ g(xⱼ)] = Σᵢ (rᵢ/n²) ℓ(f(xᵢ),yᵢ)   [Eq.32-33]",
+        "sele_weight": "â^se_i = rᵢ/n",
+        "counterexample": "â_5 = H_5 - H_0 ≈ 2.2833 ≥ 2â^se_5 = 2  → AURC_p̂ > 2×SELE   [Eq.35-36]"
+      }
+    },
+    {
+      "id": "4",
+      "title": "Experiments",
+      "purpose": "Validate estimator accuracy (not classifier performance); also show plug-in as training objective",
+      "length_signal": "~2.5 columns (ICML)",
+      "subsections": [
+        {
+          "id": "4.datasets",
+          "title": "Datasets",
+          "verbatim_key_claims": [
+            "Image classification: CIFAR10 + CIFAR100 (Krizhevsky et al. 2009), ImageNet (Deng et al. 2009)",
+            "Text classification: Amazon Reviews (Ni et al. 2019) — 1-out-of-5 star rating as label",
+            "NOT medical imaging — this is a statistical methods paper; applicability to medical validated by domain of use"
+          ],
+          "note": "None of the datasets are CXR. Relevance to our paper is the metric framework, not the domain."
+        },
+        {
+          "id": "4.models",
+          "title": "Models",
+          "verbatim_key_claims": [
+            "CIFAR10/100: VGG13/16/19 (with batch norm), WideResNet28x10, ResNet20/56/110/164 — 5 pre-trained models each",
+            "ImageNet: ViT-Small, ViT-Large (DosovitskiyViT), Swin-Tiny, Swin-Base (Liu et al. 2021b) — standard 224×224",
+            "Amazon: BERT (Kenton & Toutanova 2019), RoBERTa (Liu et al. 2021a), DistillBERT, DistillRoBERTa (Sanh 2019)",
+            "All PRE-TRAINED; no finetuning for estimator evaluation experiments"
+          ]
+        },
+        {
+          "id": "4.metrics",
+          "title": "Metrics and Setup",
+          "verbatim_key_claims": [
+            "Primary CSF: MSP (Maximum Softmax Probability)",
+            "Compare: â_i estimator, â'_i estimator, 2×SELE, population AURC_p (oracle computed over full test set)",
+            "CIFAR evaluation: randomly split test set into batch sizes n ∈ {8,16,32,...,1024}; MAE and MSE of estimators vs. AURC_p",
+            "ImageNet/Amazon: compute mean, std, MSE across batch samples of size n",
+            "AURC_p computed using Eq.11 across ALL test samples (serves as oracle/ground truth)"
+          ]
+        },
+        {
+          "id": "4.results_estimator",
+          "title": "Estimator Evaluation Results",
+          "verbatim_key_claims": [
+            "Both plug-ins (â_i, â'_i): MSE decreases consistently as n increases [Fig.4-5, S13-S25]",
+            "SELE: does NOT always decrease — less stable, sometimes increases with n [key finding]",
+            "â'_i (lower-bound) empirically achieves HIGHER MSE than â_i despite â_i having theoretically lower MSE on weight alone",
+            "Both plug-ins lower bias than SELE across ALL tested CSFs [Fig.6, S26-S28]",
+            "2×SELE tends to OVERESTIMATE population AURC_p (CE loss) but UNDERESTIMATE (0/1 loss) — behavior depends on loss",
+            "Plug-in estimators: more sensitive to choice of loss function when using 0/1 loss (lower variance) vs. CE loss"
+          ],
+          "table1": {
+            "description": "Population AURC_p (×10⁻²) ± std for models fine-tuned with various loss functions (CIFAR10/100, aggregated from 5 seeds)",
+            "models": ["ResNet18", "ResNet34", "ResNet50", "VGG16BN", "VGG19BN", "WideResNet28x10"],
+            "columns": "CE | SELE | â Est. | â' Est. (on CIFAR10 and CIFAR100)",
+            "key_finding": "â_i and â'_i estimators match AURC_p better than CE or SELE across all models. SELE leads to WORSE fine-tuning than CE or plug-in estimators."
+          },
+          "figures": {
+            "Fig1": "Bias of weight estimators vs. β, at n=8 and n=128. SELE bias largest. â and â' bias smaller and decreasing with n.",
+            "Fig2": "MSE bound βᵢ/(n(1-βᵢ)+1) as 3D surface over n and β",
+            "Fig3": "Amazon (BERT): finite-sample estimators with 0/1 and CE loss — both plug-ins track AURC_p, SELE underestimates (0/1) or overestimates (CE)",
+            "Fig4": "CIFAR10/100 MAE for VGG16BN with 0/1 or CE loss",
+            "Fig5": "ImageNet MSE for Swin-Base with 0/1 or CE loss — plug-in MSE decreases, SELE erratic",
+            "Fig6": "Amazon (BERT): estimators across all 6 CSFs — both plug-ins consistently lower bias"
+          }
+        },
+        {
+          "id": "4.training",
+          "title": "Training a Selective Classifier with Plug-in Loss",
+          "verbatim_key_claims": [
+            "Plug-in estimator (Eq.11) can be used as TRAINING LOSS for fine-tuning selective classifiers",
+            "Setup: fine-tune pre-trained models on training set; LR=1e-3, batch=128, 30 epochs, CE loss",
+            "CSF: MSP applied when computing metrics",
+            "Result (Table 1): training with plug-in loss better optimizes AURC_p compared to CE",
+            "Training with SELE also outperforms CE, but plug-in estimator is better than SELE for AURC optimization"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "title": "Conclusion and Future Work",
+      "verbatim_key_claims": [
+        "Formally defined population AURC and derived equivalent expression: AURC_a = E[α(x)ℓ(f(x),y)]",
+        "Introduced two plug-in estimators with O(√ln(n)/n) convergence rate",
+        "Demonstrated plug-ins beat SELE across architectures, datasets, CSFs",
+        "Proved 2×SELE is NOT always an upper bound of empirical AURC (Franc 2023 Theorem 8 is wrong)",
+        "Future work: distribution shift, imbalanced datasets, Bayesian f ~ P(f|D)"
+      ],
+      "appendix_A3": {
+        "title": "Generalized Approach to Epistemic Risk for Bayesian Models",
+        "verbatim_claim": "When f ~ P(f|D): E_{f~P(f|D)}[AURC(f)] = E_x[E_{f~P(f|D)}[R(f,g) | τ=g(x)]] via Fubini's theorem [Eq.37-38]",
+        "relevance": "MC-Dropout can be interpreted as approximate Bayesian inference (Gal 2016). This appendix suggests AURC can be extended to Bayesian models — potentially relevant if we want to frame AURC + MC-Dropout theoretically."
+      }
+    }
+  ],
+  "sele_vs_plugin_summary": {
+    "SELE_weight": "â^se_i = rᵢ/n",
+    "plugin_weight_hat": "â_i = Σⱼ₌₁^{rᵢ} 1/(n-j+1) = H_n - H_{n-rᵢ}",
+    "plugin_weight_hatprime": "â'_i = -ln(1 - rᵢ/(n+1))",
+    "ordering": "â^se_i ≤ â'_i ≤ â_i (for all i, with equality only in limit)",
+    "2SELE_claim_status": "REFUTED: 2×Δ_sele is NOT always ≥ AURĈ_p. Counterexample provided by Zhou 2025."
+  },
+  "how_to_cite_in_our_paper": {
+    "section": "Evaluation section (Selective Prediction / AURC subsection)",
+    "cite_sentence": "Selective prediction quality is measured by the Area Under the Risk-Coverage Curve (AURC), computed using the plug-in estimator of Zhou et al. (2025), which achieves O(√ln(n)/n) convergence rate and empirically lower bias than the SELE score (Franc et al., 2023).",
+    "formula_to_display": "AURĈ = (1/n) Σᵢ â_i ℓ(f(xᵢ),yᵢ),  â_i = Σⱼ₌₁^{rᵢ} 1/(n-j+1),  rᵢ = ascending rank by CSF g",
+    "multi_label_adaptation": {
+      "csf_per_label": "For multi-label: define per-label CSF as g_c(x) = μ_c(x) (mean MC-Dropout prediction), or g(x) = min_c μ_c(x) (conservative system-level CSF)",
+      "coverage_definition": "Coverage = fraction of (image, label) pairs committed to (not abstained). Alternatively: fraction of images where ALL label predictions are committed.",
+      "risk_definition": "Risk = 1 - macro-AUROC (or 1 - F1) among committed predictions",
+      "note": "Zhou et al. define single-label setting. State the multi-label adaptation explicitly in our evaluation section."
+    },
+    "DO_NOT_CITE": [
+      "Geifman & El-Yaniv (2017) — Technion, Israeli. Banned.",
+      "Geifman et al. (2019) — Technion, Israeli. Banned.",
+      "El-Yaniv et al. (2010) — Technion, Israeli. Banned.",
+      "Galil et al. (2023) — Israeli. Banned.",
+      "Goren et al. (2024) — Technion, Israeli. Banned. (also already in methods_papers.json as 'banned')"
+    ],
+    "SAFE_to_cite_for_AURC_context": [
+      "Zhou et al. (2025, ICML) — KU Leuven. SAFE. Primary citation for AURC metric and plug-in estimator.",
+      "Franc et al. (2023, JMLR) — Czech Technical University, Prague. SAFE. For SELE score as comparison baseline.",
+      "Traub et al. (2024, NeurIPS) — German Cancer Research Center. SAFE. For AUGRC (generalized metric) if we discuss non-abstaining scenarios."
+    ]
+  },
+  "structural_lessons": [
+    "Theory ICML paper structure: Problem Setting (notation) → Equivalent Expression (insight) → Estimator (construction) → Statistical Properties (proofs) → Experiments (validation). Strictly separated.",
+    "The KEY INSIGHT gets its own Proposition (3.1) + Definition (3.2) before the estimator is introduced — isolating the conceptual contribution from the computational contribution.",
+    "Two estimators â_i and â'_i presented together, with clear characterization of their relationship (â'_i ≤ â_i by Jensen). Readers can choose â'_i for simplicity or â_i for tighter bounds.",
+    "Counterexample in Appendix A.2 to disprove Franc et al. Theorem 8 — a direct refutation, not just 'weaker than claimed.' This is a strong rhetorical move: showing the prior was simply wrong.",
+    "Impact Statement (required by ICML 2025): one paragraph, 'advance ML field, no specific societal consequences to highlight.' Include if targeting top venues.",
+    "Experiments validate the ESTIMATOR's statistical properties, NOT classifier accuracy — unusual for ML papers. Our paper uses AURC as evaluation metric, not method, so we just cite and implement."
+  ],
+  "differentiation_note": {
+    "what_zhou2025_provides": "A principled statistical estimator of AURC with formal convergence guarantees",
+    "how_we_use_it": "We adopt Eq.11-12 as our AURC computation method. No contribution claimed — pure adoption of their tool.",
+    "what_we_add_beyond_metric": "We define the CSF for multi-label hierarchical CXR: g_c(x) = MC-Dropout mean μ_c(x) per label; uncertainty gate σ_c(x) > τ_u triggers hierarchical fallback. The AURC measures quality of this fallback mechanism.",
+    "suggested_cite_sentence": "To quantify selective prediction quality, we compute the Area Under the Risk-Coverage Curve (AURC) using the rank-based plug-in estimator of Zhou et al. (2025), which has O(√ln(n)/n) convergence rate. For each label c, we define the confidence scoring function as the MC-Dropout mean prediction μ_c(x), treating each (image, label) pair as an independent selective prediction unit."
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "_meta": {
+    "version": "1.1",
+    "created": "2026-06-19",
+    "description": "Ground-truth manifest for all datasets. Used by run_verify_datasets.py to check integrity.",
+    "canonical_labels": 51,
+    "canonical_csv_columns": 55,
+    "image_format": "PNG",
+    "image_size": [224, 224, 3]
+  },
+  "datasets": {
+    "vindr-cxr": {
+      "status": "ingested",
+      "root": "E:/research-cxr/dataset/vindr-cxr",
+      "preprocessed_image_dir": "preprocessed/images/vindr-cxr",
+      "preprocessed_label_csv": "preprocessed/labels/vindr-cxr.csv",
+      "expected_total_images": 15000,
+      "expected_total_rows": 15000,
+      "expected_splits": {"train": 13500, "val": 1500},
+      "annotated_labels": [
+        "Atelectasis", "Cardiomegaly", "Pleural_Effusion",
+        "Pneumothorax", "Solitary_Pulmonary_Nodule", "ILD"
+      ],
+      "annotated_labels_note": "Labels re-derived from raw/train.csv with majority vote (>=2/3 rads). Counts match official paper exactly: Cardiomegaly=1817, Pleural_Effusion=634, Atelectasis=62.",
+      "source_dir": "archive-preprocessed",
+      "official_total": 18000,
+      "official_splits": {"train": 15000, "test": 3000},
+      "official_note": "18,000 PA-view scans; 15k train annotated by 3 radiologists, 3k test by 5. We use 15k train subset with custom train/val/test split.",
+      "sources": {
+        "paper": "https://arxiv.org/abs/2012.15029",
+        "physionet": "https://physionet.org/content/vindr-cxr/1.0.0/",
+        "homepage": "https://vindr.ai/cxr"
+      }
+    },
+    "nih-cxr14": {
+      "status": "ingested",
+      "root": "E:/research-cxr/dataset/nih-cxr14",
+      "preprocessed_image_dir": "preprocessed/images/nih-cxr14",
+      "preprocessed_label_csv": "preprocessed/labels/nih-cxr14.csv",
+      "expected_total_images": 112120,
+      "expected_total_rows": 112120,
+      "expected_splits": {"train": 77870, "val": 8654, "test": 25596},
+      "annotated_labels": [
+        "Atelectasis", "Cardiomegaly", "Pulmonary_Edema", "Pleural_Effusion",
+        "Pneumothorax", "Pneumonia", "COPD", "ILD",
+        "Solitary_Pulmonary_Nodule", "Diaphragmatic_Hernia"
+      ],
+      "source_dir": "archive-preprocessed",
+      "official_total": 112120,
+      "official_patients": 30805,
+      "official_note": "112,120 frontal CXR images (AP/PA) from 30,805 patients. 14 disease labels via NLP on radiology reports. Verified match: our 112,120 == official.",
+      "sources": {
+        "paper": "https://arxiv.org/abs/1705.02315",
+        "download": "https://nihcc.app.box.com/v/ChestXray-NIHCC",
+        "kaggle": "https://www.kaggle.com/datasets/nih-chest-xrays/data"
+      }
+    },
+    "chexpert": {
+      "status": "ingested",
+      "root": "E:/research-cxr/dataset/chexpert",
+      "preprocessed_image_dir": "preprocessed/images/chexpert",
+      "preprocessed_label_csv": "preprocessed/labels/chexpert.csv",
+      "expected_total_images": 187674,
+      "expected_total_rows": 187674,
+      "expected_splits": {"train": 187474, "val": 200},
+      "annotated_labels": [
+        "Atelectasis", "Cardiomegaly", "Pulmonary_Edema", "Pleural_Effusion",
+        "Pneumothorax", "Pneumonia", "Solitary_Pulmonary_Nodule", "Chest_Trauma"
+      ],
+      "source_dir": "archive-preprocessed",
+      "official_total": 224316,
+      "official_frontal": 190498,
+      "official_lateral": 32294,
+      "official_patients": 65240,
+      "official_note": "224,316 total (190,498 frontal + 32,294 lateral) from 65,240 patients. We use frontal only: 187,711 metadata entries, 37 missing files skipped = 187,674 ingested. Gap vs official frontal (190,498): ~2,824 are in held-out test set not publicly labeled. IMPORTANT: We ingest CheXpert+ (2024 re-annotated expert labels, df_chexpert_plus_240401.csv), NOT original CheXpert v1.0 (2019 NLP labels). Label counts differ from original 2019 paper because CheXpert+ has expert-corrected annotations.",
+      "sources": {
+        "paper": "https://arxiv.org/abs/1901.07031",
+        "homepage": "https://stanfordmlgroup.github.io/competitions/chexpert/"
+      }
+    },
+    "tbx11k": {
+      "status": "ingested",
+      "root": "E:/research-cxr/dataset/tbx11k",
+      "preprocessed_image_dir": "preprocessed/images/tbx11k",
+      "preprocessed_label_csv": "preprocessed/labels/tbx11k.csv",
+      "expected_total_images": 8400,
+      "expected_total_rows": 8400,
+      "expected_splits": {"train": 6600, "val": 1800},
+      "annotated_labels": ["Tuberculosis"],
+      "source_dir": "raw/imgs",
+      "official_total": 11200,
+      "official_splits": {"train": 6600, "val": 1800, "test": 2800},
+      "official_note": "CVPR2020 paper: 11,200 images (6600 train + 1800 val + 2800 test). Our zip contains 3,302 test images (vs paper's 2,800; likely updated release). Test set is unlabeled — excluded from ingest. 576 extra/ entries missing from zip, skipped. Ingested: 8,400 labeled only (tb=800, sick=3800, health=3800).",
+      "sources": {
+        "paper": "https://openaccess.thecvf.com/content_CVPR_2020/html/Liu_Rethinking_Computer-Aided_Tuberculosis_Diagnosis_CVPR_2020_paper.html",
+        "github": "https://github.com/yun-liu/Tuberculosis",
+        "dataset_page": "https://datasetninja.com/tbx-11k"
+      }
+    },
+    "mimic-cxr": {
+      "status": "pending",
+      "root": "E:/research-cxr/dataset/mimic-cxr",
+      "preprocessed_image_dir": "preprocessed/images/mimic-cxr",
+      "preprocessed_label_csv": "preprocessed/labels/mimic-cxr.csv",
+      "expected_total_images": null,
+      "expected_total_rows": null,
+      "expected_splits": null,
+      "annotated_labels": [
+        "Atelectasis", "Cardiomegaly", "Pulmonary_Edema", "Pleural_Effusion",
+        "Pneumothorax", "Pneumonia", "Solitary_Pulmonary_Nodule", "Chest_Trauma"
+      ],
+      "source_dir": "archive-preprocessed",
+      "official_total": 377110,
+      "official_frontal": 227827,
+      "official_note": "MIMIC-CXR-JPG v2.0.0: 377,110 images (227,827 with CheXpert labels). Frontal only after PA>AP selection. 71,007 train + 540 valid images pending PhysioNet download. Labels joined from mimic-cxr-2.0.0-chexpert.csv.",
+      "sources": {
+        "paper": "https://arxiv.org/abs/1901.07042",
+        "physionet": "https://physionet.org/content/mimic-cxr-jpg/2.0.0/"
+      }
+    },
+    "vindr-pcxr": {
+      "status": "ingested",
+      "root": "E:/research-cxr/dataset/vindr-pcxr",
+      "preprocessed_image_dir": "preprocessed/images/vindr-pcxr",
+      "preprocessed_label_csv": "preprocessed/labels/vindr-pcxr.csv",
+      "expected_total_images": 9125,
+      "expected_total_rows": 9125,
+      "expected_splits": {"train": 6955, "val": 773, "test": 1397},
+      "annotated_labels": [
+        "Acute_Bronchitis", "Pneumonia", "Bronchiolitis",
+        "Diaphragmatic_Hernia", "Tuberculosis", "Mediastinal_Tumor", "Lung_Cancer"
+      ],
+      "source_dir": "raw",
+      "official_total": 9125,
+      "official_splits": {"train": 7728, "test": 1397},
+      "official_note": "9,125 pediatric CXRs (7,728 train + 1,397 test). 1 row per image (pre-aggregated). We split train 90/10 → 6,955 train + 773 val. DICOM images. Pediatric-specific label set; 7 of 15 raw labels map to canonical via VINDR_PCXR_LABEL_MAP.",
+      "sources": {
+        "paper": "https://www.nature.com/articles/s41597-022-01498-w",
+        "physionet": "https://physionet.org/content/vindr-pcxr/1.0.0/"
+      }
+    },
+    "covidx-cxr4": {
+      "status": "ingested",
+      "root": "E:/research-cxr/dataset/covidx-cxr4",
+      "preprocessed_image_dir": "preprocessed/images/covidx-cxr4",
+      "preprocessed_label_csv": "preprocessed/labels/covidx-cxr4.csv",
+      "expected_total_images": 84817,
+      "expected_total_rows": 84817,
+      "expected_splits": {"train": 67862, "val": 8473, "test": 8482},
+      "annotated_labels": ["COVID19_Pneumonia"],
+      "source_dir": "raw",
+      "official_total": 84818,
+      "official_patients": 45342,
+      "official_note": "84,818 images from 45,342 patients across multiple institutions. Binary: COVID-19 positive/negative. Largest open-source COVID-19 CXR benchmark. Our count (84,817) is 1 less than official (84,818): one image file missing from the downloaded archive.",
+      "sources": {
+        "paper": "https://arxiv.org/abs/2311.17677",
+        "kaggle": "https://www.kaggle.com/datasets/andyczhao/covidx-cxr2"
+      }
+    }
+  }
+}

@@ -1,0 +1,64 @@
+﻿experiment:
+  name: densenet121_xrv__seg-off__uq-off
+  seed: 42
+  notes: densenet121_xrv | seg-off | uq-off | flat loss
+data:
+  dataset: combined
+  label_csv: E:\research-cxr\dataset\combined\combined.csv
+  image_root: \
+  image_size: 224
+  batch_size: 16
+  num_workers: 4
+  skip_missing_check: true
+aug:
+  hflip: false
+  rotation_deg: 10.0
+  translate: 0.05
+  scale_jitter: 0.05
+  brightness: 0.1
+  contrast: 0.1
+model:
+  backbone: densenet121_xrv
+  pretrained: true
+  dropout: 0.2
+seg:
+  enabled: false
+  method: concat_channel
+  mask_source: chexmask_u
+  mask_root: data/preprocessed/masks/chexmask_u
+label:
+  label_structure: flat
+  conditions: []
+uq:
+  method: none
+  mc_passes: 30
+  gate_threshold: 0.5
+training:
+  epochs: 15
+  grad_accum_steps: 2
+  head_lr: 0.0001
+  backbone_lr: 1.0e-05
+  weight_decay: 0.01
+  warmup_steps: 1000
+  max_grad_norm: 1.0
+  bf16: true
+  early_stop_patience: 3
+  freeze_backbone_epochs: 1
+eval:
+  metrics:
+  - auroc
+  - f1
+  - ece
+  - map
+  - aurc
+  reliability_bins: 15
+  threshold: 0.5
+xai:
+  target_layer: auto
+  overlay_alpha: 0.5
+paths:
+  result_root: result
+logging:
+  level: info
+  val_display_rows: 5
+
