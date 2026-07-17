@@ -100,3 +100,9 @@ document/latex/*.fdb_latexmk
 # override the blanket *.png / *.csv excludes above for this folder only
 !draft/figures/*.png
 !draft/tables/*.csv
+!draft/references/*.csv
+
+# Built manuscript output (regenerate with scripts/build_docx.py; source of
+# truth is draft/sections + draft/equations + draft/tables + draft/figures)
+draft/manuscript/*.docx
+draft/manuscript/*.pdf

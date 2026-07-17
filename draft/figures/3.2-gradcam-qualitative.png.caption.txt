@@ -1,0 +1,1 @@
+Grad-CAM heatmaps from the flat model for one representative test image per mapped finding, selected by first appearance in the bounding box file, with the ground truth box in green and the predicted box in pink.

@@ -16,6 +16,7 @@ dependencies = [
     "pydicom>=3.0.2",
     "pylibjpeg>=2.1.0",
     "pylibjpeg-libjpeg>=2.4.0",
+    "python-docx>=1.2.0",
 ]
 
 # torch/torchvision are NOT in [dependencies] above; pick one per device with an

@@ -1,0 +1,1 @@
+Localization metrics against NIH ChestX-ray14 bounding boxes for the flat and hierarchical conditions on the test partition, macro-averaged across six mapped findings.

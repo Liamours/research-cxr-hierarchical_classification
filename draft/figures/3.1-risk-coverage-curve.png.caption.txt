@@ -1,0 +1,1 @@
+Risk-coverage curve comparing the flat and hierarchical conditions on the test partition, plotting risk against coverage at 20 confidence-sorted points.

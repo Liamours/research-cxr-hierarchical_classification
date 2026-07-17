@@ -1,0 +1,1 @@
+Reliability diagram comparing the flat and hierarchical conditions on the test partition, plotting predicted confidence against empirical positive rate across 15 bins.

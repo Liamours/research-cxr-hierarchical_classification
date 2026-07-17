@@ -1,3 +1,3 @@
-Condition,n boxes,IoU,Intersection over ground-truth box,Pointing game,AP at 0.1,AP at 0.25,AP at 0.5
-Flat,118,0.0107,0.1419,0.6 percent,0.1864,0.0000,0.0000
-Hierarchical,118,0.0099,0.0864,0.6 percent,0.1025,0.0000,0.0000
+Condition,n boxes,IoU,Intersection over ground-truth box,Pointing game,AP at 0.1
+Flat,118,0.0107,0.1419,0.6 percent,0.1864
+Hierarchical,118,0.0099,0.0864,0.6 percent,0.1025
