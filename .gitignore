@@ -85,7 +85,7 @@ document/localization_bboxes_*.yaml
 analysis_export/
 
 # Personal notes (advisor meetings, working-hours reconstructed from AI session activity)
-docs/notes/
+notes/
 
 # One-off personal download helper (hardcoded PhysioNet username)
 scripts/download_vindr_cxr_test.ps1
@@ -95,3 +95,8 @@ document/latex/*.aux
 document/latex/*.log
 document/latex/*.fls
 document/latex/*.fdb_latexmk
+
+# Paper draft figures/tables ARE the deliverable, not dataset files —
+# override the blanket *.png / *.csv excludes above for this folder only
+!draft/figures/*.png
+!draft/tables/*.csv

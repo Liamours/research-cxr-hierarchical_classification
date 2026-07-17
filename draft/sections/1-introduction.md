@@ -26,7 +26,7 @@ a hierarchy-consistency-regularized loss (Hierarchical Binary Cross-Entropy,
 HBCE) that penalizes predictions where a child finding is predicted positive
 while its parent is predicted negative. We report both models' discrimination,
 calibration, and selective prediction quality on held-out validation and test
-splits from the pooled corpus, and we report a localization sanity check using
+partitions from the pooled corpus, and we report a localization sanity check using
 Gradient-weighted Class Activation Mapping against the subset of images with
 publicly available bounding-box annotations.
 
