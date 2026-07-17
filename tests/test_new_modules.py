@@ -18,7 +18,7 @@ import torch
 
 from src.data.label_space import CANONICAL_LABELS
 from src.data.hierarchy import edge_index_pairs, validate_edges
-from src.train.losses import HBCELoss, MaskedBCELoss
+from src.train.losses import BAFLLoss, HBCELoss, MaskedBCELoss, train_class_weights
 from src.inference.hierarchical_fallback import apply_hierarchical_fallback
 from src.evaluate.calibration import compute_calibration, expected_calibration_error
 from src.evaluate.selective import compute_aurc, aurc_flat, per_class_aurc
@@ -90,6 +90,73 @@ def test_hbce_no_edges_equals_bce():
     assert hbce(logits, targets, mask).item() == pytest.approx(
         bce(logits, targets, mask).item(), rel=1e-5
     )
+
+
+# ---------------------------------------------------------------------------
+# BAFLLoss
+# ---------------------------------------------------------------------------
+
+def test_bafl_gamma_ramps_and_clamps():
+    loss_fn = BAFLLoss(torch.ones(2), gamma_init=0.5, gamma_final=2.5, t_warmup=10)
+    loss_fn.set_epoch(0)
+    assert loss_fn.gamma == pytest.approx(0.5)
+    loss_fn.set_epoch(5)
+    assert loss_fn.gamma == pytest.approx(1.5)
+    loss_fn.set_epoch(10)
+    assert loss_fn.gamma == pytest.approx(2.5)
+    loss_fn.set_epoch(999)  # past warmup: clamp, don't overshoot
+    assert loss_fn.gamma == pytest.approx(2.5)
+
+
+def test_bafl_masks_like_masked_bce():
+    loss_fn = BAFLLoss(torch.ones(3), gamma_init=0.0, gamma_final=0.0)  # gamma=0 -> focal term is 1
+    bce = MaskedBCELoss()
+    logits = torch.randn(4, 3)
+    targets = (torch.rand(4, 3) > 0.5).float()
+    mask = (torch.rand(4, 3) > 0.3).float()
+    assert loss_fn(logits, targets, mask).item() == pytest.approx(
+        bce(logits, targets, mask).item(), rel=1e-5
+    )
+
+
+def test_bafl_downweights_confident_correct_predictions():
+    loss_fn = BAFLLoss(torch.ones(1), gamma_init=2.0, gamma_final=2.0)
+    confident_correct = torch.tensor([[_logit(0.95)]])
+    unsure_correct = torch.tensor([[_logit(0.6)]])
+    targets = torch.ones(1, 1)
+    mask = torch.ones(1, 1)
+    loss_confident = loss_fn(confident_correct, targets, mask).item()
+    loss_unsure = loss_fn(unsure_correct, targets, mask).item()
+    assert loss_confident < loss_unsure
+
+
+def test_train_class_weights_rarer_class_gets_higher_weight(tmp_path):
+    conditions = ["Common", "Rare"]
+    df = pd.DataFrame({
+        "split": ["train"] * 100,
+        "Common": [1.0] * 50 + [0.0] * 50,
+        "Rare": [1.0] * 2 + [0.0] * 98,
+    })
+    csv_path = tmp_path / "labels.csv"
+    df.to_csv(csv_path, index=False)
+    w = train_class_weights(csv_path, conditions, beta=0.999)
+    assert w[1] > w[0]  # Rare (n=2) weighted higher than Common (n=50)
+    assert w.mean().item() == pytest.approx(1.0, abs=1e-4)  # both active -> same as global mean
+
+
+def test_train_class_weights_dead_labels_dont_dilute_normalization(tmp_path):
+    conditions = ["Common", "Rare", "Dead"]
+    df = pd.DataFrame({
+        "split": ["train"] * 100,
+        "Common": [1.0] * 50 + [0.0] * 50,
+        "Rare": [1.0] * 2 + [0.0] * 98,
+        "Dead": [np.nan] * 100,   # never annotated -> always mask=0 in training
+    })
+    csv_path = tmp_path / "labels.csv"
+    df.to_csv(csv_path, index=False)
+    w = train_class_weights(csv_path, conditions, beta=0.999)
+    assert w[:2].mean().item() == pytest.approx(1.0, abs=1e-4)  # active labels normalize to 1
+    assert w.mean().item() != pytest.approx(1.0, abs=1e-4)      # Dead's presence skews the raw mean
 
 
 # ---------------------------------------------------------------------------

@@ -9,14 +9,13 @@ from torch.utils.data import DataLoader
 
 from src.data.dataset import CxrClsDataset
 from src.data.transforms import build_transform, norm_kind_for_backbone
-from src.util.device import pick_device
 from src.util.seed import seed_worker
 
 
 def build_loaders(cfg) -> dict[str, DataLoader | None]:
     norm_kind = norm_kind_for_backbone(cfg.model.backbone)
     image_size = cfg.data.image_size
-    device = pick_device()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     generator = torch.Generator()
     generator.manual_seed(cfg.experiment.seed)
 

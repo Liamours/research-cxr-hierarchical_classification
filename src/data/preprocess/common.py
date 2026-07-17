@@ -4,7 +4,7 @@ Produces the canonical on-disk layout from the standardized protocol:
   out_root/images/<dataset>/<image_id>.png   224x224x3 uint8
   out_root/labels/<dataset>.csv              4 id columns + one per canonical label
 
-The dataset-specific modules (mimic_cxr.py, etc.) only build a list of simple
+The dataset-specific modules (chexpert_plus.py, etc.) only build a list of simple
 records and delegate the image + label + CSV work here, so the testable core
 is shared and identical across datasets.
 
@@ -33,7 +33,7 @@ from src.data.label_space import CANONICAL_LABELS
 CSV_COLUMNS = ["image_id", "image_path", "dataset", "split"] + CANONICAL_LABELS
 
 # CheXpert NLP-labeler column -> canonical disease (lossy; see label_space). Only
-# defensible finding->disease correspondences are kept. Shared by MIMIC-CXR-JPG and
+# defensible finding->disease correspondences are kept. Used by
 # CheXpert+. Dropped (no clear clinical-diagnosis home): Consolidation, Enlarged
 # Cardiomediastinum, Lung Opacity, Pleural Other, Support Devices, No Finding.
 CHEXPERT_LABEL_MAP = {
@@ -109,7 +109,7 @@ def process_path(path, image_size: int = 224) -> Image.Image:
 
 
 def map_uncertain_value(v) -> float:
-    """MIMIC/CheXpert mapping: -1 (uncertain) -> 0, NaN (not mentioned) -> 0,
+    """CheXpert mapping: -1 (uncertain) -> 0, NaN (not mentioned) -> 0,
     1 -> 1, 0 -> 0 (U-Zero policy)."""
     if v is None or (isinstance(v, float) and math.isnan(v)):
         return 0.0

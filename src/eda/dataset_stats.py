@@ -59,8 +59,8 @@ def cooccurrence(df: pd.DataFrame, conditions: list[str] | None = None,
 def _patient_ids(df: pd.DataFrame, dataset: str) -> tuple[pd.Series, str]:
     if "patient_id" in df.columns:
         return df["patient_id"].astype(str), "patient"
-    if dataset in ("mimic-cxr", "chexpert"):
-        # image_id starts with the patient token, e.g. "p10000032_s..." / "patient00001_..."
+    if dataset == "chexpert":
+        # image_id starts with the patient token, e.g. "patient00001_..."
         return df["image_id"].astype(str).str.split("_").str[0], "patient"
     return df["image_id"].astype(str), "image"
 

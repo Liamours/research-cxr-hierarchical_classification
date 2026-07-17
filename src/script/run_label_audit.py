@@ -23,7 +23,7 @@ from src.data.label_map import load_equivalence
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--raw-csv", required=True, help="raw dataset label CSV (read for column names only)")
-    p.add_argument("--dataset", default=None, help="dataset key, e.g. mimic-cxr | nih-cxr14 | vindr-cxr")
+    p.add_argument("--dataset", default=None, help="dataset key, e.g. chexpert | nih-cxr14 | vindr-cxr")
     p.add_argument("--equivalence", default="configs/label_equivalence.json")
     p.add_argument("--columns", nargs="*", default=None, help="override: explicit column names instead of CSV header")
     return p.parse_args()

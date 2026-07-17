@@ -11,16 +11,16 @@ Output: a single combined.csv with the same 55-column schema, ready for training
 
 Usage:
     uv run python src/script/run_combine_datasets.py `
-        --out E:/research-cxr/dataset/combined/combined.csv
+        --out dataset/combined/combined.csv
 
     # exclude a dataset (e.g. vindr-pcxr is pediatric)
     uv run python src/script/run_combine_datasets.py `
-        --out E:/research-cxr/dataset/combined/combined.csv `
+        --out dataset/combined/combined.csv `
         --exclude vindr-pcxr
 
     # dry run: print stats only, don't write
     uv run python src/script/run_combine_datasets.py `
-        --out E:/research-cxr/dataset/combined/combined.csv --dry-run
+        --out dataset/combined/combined.csv --dry-run
 """
 from __future__ import annotations
 

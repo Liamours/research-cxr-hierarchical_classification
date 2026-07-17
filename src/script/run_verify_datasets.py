@@ -28,10 +28,10 @@ from src.data.preprocess.common import CSV_COLUMNS
 from src.data.label_space import CANONICAL_LABELS
 
 REGISTRY = Path(__file__).resolve().parents[2] / "configs" / "dataset_registry.json"
-PASS = "\033[92m✅\033[0m"
-FAIL = "\033[91m❌\033[0m"
-WARN = "\033[93m⚠️\033[0m"
-SKIP = "⏳"
+PASS = "\033[92m[OK]\033[0m"
+FAIL = "\033[91m[FAIL]\033[0m"
+WARN = "\033[93m[WARN]\033[0m"
+SKIP = "[SKIP]"
 
 
 def check_dataset(name: str, cfg: dict, sample: int | None) -> bool:

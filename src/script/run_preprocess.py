@@ -21,10 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pandas as pd
 
-from src.data.preprocess import chexpert_plus, mimic_cxr, nih_cxr14, vindr_cxr
+from src.data.preprocess import chexpert_plus, nih_cxr14, vindr_cxr
 
 ADAPTERS = {
-    "mimic-cxr": mimic_cxr.preprocess_mimic,
     "chexpert": chexpert_plus.preprocess_chexpert,
     "nih-cxr14": nih_cxr14.preprocess_nih,
     "vindr-cxr": vindr_cxr.preprocess_vindr,

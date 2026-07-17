@@ -68,14 +68,16 @@ class CxrPredictor:
 
     @torch.no_grad()
     def predict_with_uncertainty(self, image_path, n_passes: int | None = None):
-        """MC Dropout inference: returns (condition, mean_prob, variance) ranked
-        by mean probability."""
+        """MC Dropout inference: returns (condition, mean_prob, variance, epistemic,
+        aleatoric) ranked by mean probability. variance = epistemic + aleatoric."""
         passes = n_passes or self.cfg.uq.mc_passes
         x = self._load_tensor(image_path).to(self.device)
-        mean, var = mc_dropout_predict(self.model, x, n_passes=passes)
-        mean, var = mean[0].cpu(), var[0].cpu()
-        triples = list(zip(self.conditions, mean.tolist(), var.tolist()))
-        return sorted(triples, key=lambda t: t[1], reverse=True)
+        mean, epistemic, aleatoric = mc_dropout_predict(self.model, x, n_passes=passes)
+        mean, epistemic, aleatoric = mean[0].cpu(), epistemic[0].cpu(), aleatoric[0].cpu()
+        var = epistemic + aleatoric
+        quints = list(zip(self.conditions, mean.tolist(), var.tolist(),
+                          epistemic.tolist(), aleatoric.tolist()))
+        return sorted(quints, key=lambda t: t[1], reverse=True)
 
     @torch.no_grad()
     def predict_hierarchical(self, image_path, n_passes: int | None = None):
@@ -89,8 +91,8 @@ class CxrPredictor:
         """
         passes = n_passes or self.cfg.uq.mc_passes
         x = self._load_tensor(image_path).to(self.device)
-        mean, var = mc_dropout_predict(self.model, x, n_passes=passes)
-        mean, var = mean[0].cpu(), var[0].cpu()
+        mean, epistemic, aleatoric = mc_dropout_predict(self.model, x, n_passes=passes)
+        mean, var = mean[0].cpu(), (epistemic[0] + aleatoric[0]).cpu()
 
         pairs = edge_index_pairs(self.conditions)
         adjusted, log = apply_hierarchical_fallback(

@@ -25,7 +25,7 @@ def test_config_round_trip(tmp_path):
 
 
 def test_config_override_and_reject(tmp_path):
-    c = ExperimentConfig.from_yaml("configs/flat_densenet_baseline.yaml",
+    c = ExperimentConfig.from_yaml("configs/densenet121_xrv__flat.yaml",
                                    overrides={"training.epochs": 2})
     assert c.training.epochs == 2
     (tmp_path / "bad.yaml").write_text("training:\n  not_a_field: 1\n")
@@ -52,7 +52,7 @@ def test_split_leakage_detected():
     from src.eda.dataset_stats import split_leakage
     df = pd.DataFrame({"image_id": ["p1_s1", "p1_s2", "p2_s1"],
                        "split": ["train", "val", "train"]})
-    rep = split_leakage(df, "mimic-cxr")
+    rep = split_leakage(df, "chexpert")
     assert rep["n_leaked"] == 1 and rep["leaked"] == ["p1"]
 
 
@@ -80,7 +80,6 @@ def test_equivalence_json_matches_code_maps():
 
     assert eq.dataset_to_canonical("nih-cxr14") == NIH_LABEL_MAP
     assert eq.dataset_to_canonical("vindr-cxr") == VINDR_LABEL_MAP
-    assert eq.dataset_to_canonical("mimic-cxr") == CHEXPERT_LABEL_MAP
     assert eq.dataset_to_canonical("chexpert") == CHEXPERT_LABEL_MAP
 
 

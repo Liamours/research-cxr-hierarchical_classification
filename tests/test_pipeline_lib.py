@@ -11,7 +11,7 @@ import pytest
 import torch
 
 from src.data.label_space import CANONICAL_LABELS
-from src.data.preprocess import common, chexpert_plus, nih_cxr14, mimic_cxr, vindr_cxr
+from src.data.preprocess import common, chexpert_plus, nih_cxr14, padchest, vindr_cxr
 
 
 def _img(p, mode, sz=(96, 96)):
@@ -56,7 +56,7 @@ def test_preprocess_nih(tmp_path):
 
 
 def test_preprocess_adapters_defer_without_data(tmp_path):
-    for fn in (mimic_cxr.preprocess_mimic, vindr_cxr.preprocess_vindr):
+    for fn in (padchest.preprocess_padchest, vindr_cxr.preprocess_vindr):
         with pytest.raises(FileNotFoundError):
             fn(tmp_path / "nope", tmp_path / "o")
 
@@ -86,8 +86,10 @@ def test_predictor_point_and_uncertainty(make_cfg, synth):
     ranked = pred.predict_image(synth["image"])
     assert len(ranked) == len(CANONICAL_LABELS) and all(0 <= v <= 1 for _, v in ranked)
     cfg.uq.mc_passes = 4
-    triples = pred.predict_with_uncertainty(synth["image"], n_passes=4)
-    assert len(triples) == len(CANONICAL_LABELS) and len(triples[0]) == 3
+    quints = pred.predict_with_uncertainty(synth["image"], n_passes=4)
+    assert len(quints) == len(CANONICAL_LABELS) and len(quints[0]) == 5
+    _, _, var, epistemic, aleatoric = quints[0]
+    assert abs(var - (epistemic + aleatoric)) < 1e-6
 
 
 def test_grid_build_and_aggregate(make_cfg):
@@ -95,7 +97,7 @@ def test_grid_build_and_aggregate(make_cfg):
     from src.experiment.aggregate import aggregate
     cfg = make_cfg(name="grid")
     conds = enumerate_conditions()
-    assert len(conds) == 8
+    assert len(conds) == 4
     configs = build_grid(cfg)
     df = aggregate(configs, "val")
-    assert len(df) == 8  # none run yet -> all rows present (missing)
+    assert len(df) == 4  # none run yet -> all rows present (missing)

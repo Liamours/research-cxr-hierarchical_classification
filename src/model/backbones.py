@@ -1,13 +1,20 @@
 """Vision backbones for CXR classification.
 
 Each builder returns (module, feature_dim, norm_kind). The module maps an
-input image batch to a pooled feature vector; the head (heads.py) maps that to
-logits. norm_kind must agree with transforms.norm_kind_for_backbone so the
+input image batch to a pooled feature vector; the head (nn.Sequential in
+classifier.py) maps that to logits. norm_kind must agree with transforms.norm_kind_for_backbone so the
 dataset normalizes correctly.
 
   densenet121_xrv  torchxrayvision DenseNet121 (weights=densenet121-res224-all),
                    1-channel grayscale [-1024, 1024], 1024-dim feature vector.
-                   Pretrained on NIH+PadChest+CheXpert+MIMIC+OpenI+RSNA.
+                   Pretrained on NIH+PadChest+CheXpert+MIMIC+OpenI+RSNA (CXR-domain).
+
+  vit_base_imagenet  timm vit_base_patch16_224, ImageNet-1k pretrained (generic
+                   natural-image domain, not CXR-specific -- no CXR-pretrained ViT
+                   checkpoint exists publicly). 3-channel (grayscale replicated),
+                   ImageNet mean/std, 768-dim feature vector. Architecture-comparison
+                   arm against densenet121_xrv; the pretraining-domain mismatch is a
+                   known confound, not a bug.
 """
 
 from __future__ import annotations
@@ -32,12 +39,16 @@ class _XrvFeatures(nn.Module):
 
 
 def build_backbone(name: str, pretrained: bool = True):
-    if name != "densenet121_xrv":
-        raise ValueError(f"unknown backbone: {name!r} (only 'densenet121_xrv' supported)")
-    import torchxrayvision as xrv
-    weights = "densenet121-res224-all" if pretrained else None
-    net = xrv.models.DenseNet(weights=weights)
-    return _XrvFeatures(net), 1024, "xrv"
+    if name == "densenet121_xrv":
+        import torchxrayvision as xrv
+        weights = "densenet121-res224-all" if pretrained else None
+        net = xrv.models.DenseNet(weights=weights)
+        return _XrvFeatures(net), 1024, "xrv"
+    if name == "vit_base_imagenet":
+        import timm
+        net = timm.create_model("vit_base_patch16_224", pretrained=pretrained, num_classes=0)
+        return net, net.num_features, "imagenet"
+    raise ValueError(f"unknown backbone: {name!r} (supported: 'densenet121_xrv', 'vit_base_imagenet')")
 
 
 def expand_conv_in_channels(conv: nn.Conv2d, new_in: int) -> nn.Conv2d:

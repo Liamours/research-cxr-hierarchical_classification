@@ -101,7 +101,6 @@ class LabelEquivalence:
                 slot[dataset] = [slot[dataset], raw_name]
 
         for col, canon in CHEXPERT_LABEL_MAP.items():
-            add(canon, "mimic-cxr", col)
             add(canon, "chexpert", col)
         for col, canon in NIH_LABEL_MAP.items():
             add(canon, "nih-cxr14", col)

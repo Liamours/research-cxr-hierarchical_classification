@@ -1,7 +1,7 @@
 """Adapter join/split logic (previously only defer-tested).
 
-Covers the MIMIC merge + frontal selection and the NIH/VinDr validation-split
-carve, on synthetic raw inputs shaped like the real file formats."""
+Covers the NIH/VinDr validation-split carve, on synthetic raw inputs shaped
+like the real file formats."""
 
 from __future__ import annotations
 
@@ -12,39 +12,13 @@ import torch
 from PIL import Image
 
 from src.data.label_space import CANONICAL_LABELS
-from src.data.preprocess import common, mimic_cxr, nih_cxr14, vindr_cxr
+from src.data.preprocess import common, nih_cxr14, vindr_cxr
 from src.data.label_map import load_equivalence
 
 
 def _jpg(p, sz=(90, 90)):
     p.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(np.random.default_rng(0).integers(0, 255, sz + (3,), np.uint8), "RGB").save(p)
-
-
-def test_mimic_merge_frontal_and_splits(tmp_path):
-    chex_cols = list(common.CHEXPERT_LABEL_MAP.keys())
-    meta, split, chex = [], [], []
-    for i in range(6):
-        subj, study, dic = 10000000 + i, 50000000 + i, f"d{i}"
-        meta.append({"dicom_id": dic, "study_id": study, "subject_id": subj,
-                     "ViewPosition": "AP" if i % 3 == 0 else "PA"})
-        split.append({"dicom_id": dic, "study_id": study, "subject_id": subj,
-                      "split": "train" if i < 4 else ("validate" if i == 4 else "test")})
-        row = {"subject_id": subj, "study_id": study, **{c: 0.0 for c in chex_cols}}
-        row["Atelectasis"] = -1.0  # uncertain -> 0
-        chex.append(row)
-        _jpg(tmp_path / "files" / f"p{str(subj)[:2]}" / f"p{subj}" / f"s{study}" / f"{dic}.jpg")
-        if i == 0:  # extra lateral on same study -> must be dropped by frontal selection
-            meta.append({"dicom_id": dic + "L", "study_id": study, "subject_id": subj, "ViewPosition": "LATERAL"})
-            split.append({"dicom_id": dic + "L", "study_id": study, "subject_id": subj, "split": "train"})
-            _jpg(tmp_path / "files" / f"p{str(subj)[:2]}" / f"p{subj}" / f"s{study}" / f"{dic}L.jpg")
-    pd.DataFrame(meta).to_csv(tmp_path / "mimic-cxr-2.0.0-metadata.csv.gz", index=False)
-    pd.DataFrame(split).to_csv(tmp_path / "mimic-cxr-2.0.0-split.csv.gz", index=False)
-    pd.DataFrame(chex).to_csv(tmp_path / "mimic-cxr-2.0.0-chexpert.csv.gz", index=False)
-    df = pd.read_csv(mimic_cxr.preprocess_mimic(tmp_path, tmp_path / "pre"))
-    assert len(df) == 6                                   # one frontal per study (lateral dropped)
-    assert set(df["split"]) == {"train", "val", "test"}    # validate -> val
-    assert (df["Atelectasis"] == 0).all()                  # -1 -> 0
 
 
 def test_nih_carves_patient_level_val(tmp_path):

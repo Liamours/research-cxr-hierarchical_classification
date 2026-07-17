@@ -1,14 +1,13 @@
-"""The 8-condition ablation grid: 1 backbone × 2 seg × 2 label_structure × 2 uq.
+"""The 4-condition ablation grid: 1 backbone × 2 label_structure × 2 uq.
 
 Backbone is fixed: densenet121_xrv (TorchXRayVision DenseNet121, CXR-pretrained).
-Backbone is not a variable in this study — it is a controlled choice.
+Segmentation input is fixed: off (no mask channel).
 
-Factor 1 — segmentation:    off | concat_channel (CheXmask-U)
-Factor 2 — label_structure: flat | hierarchical (HBCE loss)
-Factor 3 — UQ:              none | mc_dropout
+Factor 1 — label_structure: flat | hierarchical (HBCE loss)
+Factor 2 — UQ:              none | mc_dropout
 
 Condition configs are derived from a base config (shared data/training/paths)
-by overriding the three factors. Names are fully descriptive so no legend is needed.
+by overriding the two factors. Names are fully descriptive so no legend is needed.
 """
 
 from __future__ import annotations
@@ -17,18 +16,17 @@ import copy
 import itertools
 from pathlib import Path
 
-MODELS = ["densenet121_xrv"]
-SEG = [False, True]
+SEG = [False]
 LABEL_STRUCTURES = ["flat", "hierarchical"]
 UQ = [False, True]
 
-BASE_METRICS = ["auroc", "f1", "ece", "map", "aurc"]
+BASE_METRICS = ["auroc", "f1", "ece", "map", "aurc", "hcv", "clf"]
 
 
 def enumerate_conditions() -> list[dict]:
     return [
-        {"model": m, "seg": s, "label": l, "uq": u}
-        for m, s, l, u in itertools.product(MODELS, SEG, LABEL_STRUCTURES, UQ)
+        {"model": "densenet121_xrv", "seg": s, "label": l, "uq": u}
+        for s, l, u in itertools.product(SEG, LABEL_STRUCTURES, UQ)
     ]
 
 
@@ -39,16 +37,6 @@ def grid_name(c: dict) -> str:
     return base if c["label"] == "flat" else f"{base}__hierarchical"
 
 
-def _notes(c: dict) -> str:
-    parts = [
-        c["model"],
-        "seg-concat" if c["seg"] else "seg-off",
-        "mc-dropout" if c["uq"] else "uq-off",
-        f"{c['label']} loss",
-    ]
-    return " | ".join(parts)
-
-
 def build_condition_config(base, c: dict):
     cfg = copy.deepcopy(base)
     cfg.model.backbone = c["model"]
@@ -57,11 +45,13 @@ def build_condition_config(base, c: dict):
     cfg.label.label_structure = c["label"]
     cfg.uq.method = "mc_dropout" if c["uq"] else "none"
     cfg.experiment.name = grid_name(c)
-    cfg.experiment.notes = _notes(c)
-    metrics = list(BASE_METRICS)
-    if c["uq"]:
-        metrics.append("selective")
-    cfg.eval.metrics = metrics
+    cfg.experiment.notes = " | ".join([
+        c["model"],
+        "seg-concat" if c["seg"] else "seg-off",
+        "mc-dropout" if c["uq"] else "uq-off",
+        f"{c['label']} loss",
+    ])
+    cfg.eval.metrics = list(BASE_METRICS)
     return cfg
 
 

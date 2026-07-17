@@ -1,7 +1,8 @@
-"""Training entry point. Every run goes through a YAML config.
+"""Training entry point. Every run goes through a YAML config. After training,
+the best checkpoint is evaluated on val and test (skipped for --max-samples smokes).
 
-    uv run python src/script/run_train.py --config configs/grid/densenet121_xrv__seg-off__uq-off.yaml
-    uv run python src/script/run_train.py --config configs/grid/densenet121_xrv__seg-off__uq-off.yaml --max-samples 64
+    uv run python src/script/run_train.py --config configs/densenet121_xrv__flat.yaml
+    uv run python src/script/run_train.py --config configs/densenet121_xrv__flat.yaml --max-samples 64
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from torch.utils.data import DataLoader, Subset
 
 from src.config.experiment_config import ExperimentConfig
 from src.data.loader import build_loaders
+from src.evaluate.evaluator import evaluate_model
 from src.model.classifier import build_model_from_cfg
 from src.train.trainer import MultiLabelTrainer
 from src.util.logging import RunLogger
@@ -64,6 +66,10 @@ def main():
     set_seed(cfg.experiment.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
     print("Config:\n" + cfg.summary())
     print(f"Device: {device}")
 
@@ -81,7 +87,25 @@ def main():
 
     trainer = MultiLabelTrainer(model, loaders, cfg, device, logger)
     trainer.train()
+
+    if not args.max_samples:                       # skip eval for smoke runs
+        _final_eval(cfg, model, loaders, device, logger)
     print(f"Run dir: {cfg.run_dir()}")
+
+
+def _final_eval(cfg, model, loaders, device, logger):
+    """Evaluate the best-AUROC checkpoint on val and test, writing
+    eval_metrics_<split>.json + predictions into the run dir."""
+    ckpt = cfg.run_dir() / "checkpoints" / "best_val_auroc_macro.pt"
+    if ckpt.exists():
+        model.load_state_dict(
+            torch.load(ckpt, map_location=device, weights_only=True), strict=False)
+        logger.log(f"final eval: loaded {ckpt.name}")
+    else:
+        logger.log(f"final eval: {ckpt.name} missing; evaluating current weights")
+    for split in ("val", "test"):
+        if loaders.get(split) is not None:
+            evaluate_model(model, loaders[split], device, cfg, split=split, logger=logger)
 
 
 if __name__ == "__main__":

@@ -37,7 +37,8 @@ def parse_args():
     p.add_argument("--config", required=True)
     p.add_argument("--checkpoint", default=None)
     p.add_argument("--ckpt-name", default="best_val_auroc_macro",
-                    choices=["last", "best_val_loss", "best_val_auroc_macro", "best_val_f1_macro"])
+                    choices=["last", "best_val_loss", "best_val_auroc_macro",
+                             "best_val_f1_macro", "best_val_aurc_macro"])
     p.add_argument("--image", required=True)
     p.add_argument("--class-name", default=None, help="condition to explain; default = top prediction")
     return p.parse_args()

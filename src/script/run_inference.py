@@ -43,9 +43,10 @@ def main():
     print(f"\n=== Prediction: {args.image} ===")
     if cfg.uq.method == "mc_dropout":
         ranked = predictor.predict_with_uncertainty(args.image)
-        print(f"(MC Dropout, {cfg.uq.mc_passes} passes — prob +/- std)")
-        for cond, mean, var in ranked[: args.top_k]:
-            print(f"  {cond:30s} {mean:.4f} +/- {var ** 0.5:.4f}")
+        print(f"(MC Dropout, {cfg.uq.mc_passes} passes — prob +/- std [epistemic/aleatoric])")
+        for cond, mean, var, epistemic, aleatoric in ranked[: args.top_k]:
+            print(f"  {cond:30s} {mean:.4f} +/- {var ** 0.5:.4f}"
+                  f"  [epi={epistemic:.4f} alea={aleatoric:.4f}]")
         top = {"condition": ranked[0][0], "prob": round(ranked[0][1], 4)}
     else:
         ranked = predictor.predict_image(args.image)

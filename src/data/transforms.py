@@ -26,15 +26,28 @@ DEFAULT_AUG = {
 }
 
 
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+
+
 def norm_kind_for_backbone(backbone: str) -> str:
     if backbone.startswith("densenet121_xrv"):
         return "xrv"
+    if backbone.startswith("vit_"):
+        return "imagenet"
     raise ValueError(f"unknown backbone for normalization: {backbone!r}")
 
 
 def _xrv_normalize(t: torch.Tensor) -> torch.Tensor:
     # t in [0, 1] from ToTensor -> torchxrayvision [-1024, 1024] convention.
     return (2.0 * t - 1.0) * 1024.0
+
+
+def _to_3ch(t: torch.Tensor) -> torch.Tensor:
+    # Grayscale source, ImageNet-pretrained backbone expects 3 channels ->
+    # replicate rather than surgically expand the pretrained patch-embed conv,
+    # so the ImageNet-pretrained stem weights stay untouched.
+    return t.repeat(3, 1, 1)
 
 
 def _aug_ops(p: dict) -> list:
@@ -67,13 +80,16 @@ def build_transform(
     # are keyed by image_id. build_transform only produces the image tensor.
     aug = _aug_ops(aug_params if aug_params is not None else DEFAULT_AUG) if augment else []
 
-    if norm_kind != "xrv":
-        raise ValueError(f"unknown norm_kind: {norm_kind!r}")
-    ops = [
+    base = [
         transforms.Grayscale(num_output_channels=1),
         transforms.Resize((image_size, image_size)),
         *aug,
         transforms.ToTensor(),
-        transforms.Lambda(_xrv_normalize),
     ]
-    return transforms.Compose(ops)
+    if norm_kind == "xrv":
+        tail = [transforms.Lambda(_xrv_normalize)]
+    elif norm_kind == "imagenet":
+        tail = [transforms.Lambda(_to_3ch), transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)]
+    else:
+        raise ValueError(f"unknown norm_kind: {norm_kind!r}")
+    return transforms.Compose(base + tail)

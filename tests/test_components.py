@@ -1,5 +1,5 @@
 """Component tests for under-covered modules: segmentation, backbones,
-mc_dropout, device, and the preprocess CLI."""
+mc_dropout, and the preprocess CLI."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from src.data.label_space import CANONICAL_LABELS
 from src.model import backbones as B
 from src.model.classifier import CxrClassifier
 from src.model.mc_dropout import mc_dropout_predict, uncertainty_sanity_check
-from src.util.device import pick_device
 
 
 def test_segmentation_providers_and_conditioning():
@@ -50,8 +49,10 @@ def test_backbones_build_and_conv_adapt():
 
 def test_mc_dropout_predict_mean_var():
     flat = CxrClassifier("densenet121_xrv", pretrained=False)
-    mean, var = mc_dropout_predict(flat, torch.randn(2, 1, 224, 224), 4)
-    assert tuple(mean.shape) == (2, len(CANONICAL_LABELS)) and tuple(var.shape) == (2, len(CANONICAL_LABELS))
+    mean, epistemic, aleatoric = mc_dropout_predict(flat, torch.randn(2, 1, 224, 224), 4)
+    shape = (2, len(CANONICAL_LABELS))
+    assert tuple(mean.shape) == shape and tuple(epistemic.shape) == shape and tuple(aleatoric.shape) == shape
+    assert (epistemic >= 0).all() and (aleatoric >= 0).all()
 
 
 def test_uncertainty_helpers():
@@ -59,10 +60,6 @@ def test_uncertainty_helpers():
     t, m = (torch.rand(4, len(CANONICAL_LABELS)) > 0.5).float(), torch.ones(4, len(CANONICAL_LABELS))
     sc = uncertainty_sanity_check(mean, var, t, m)
     assert set(sc) == {"unc_correct", "unc_wrong", "passes"}
-
-
-def test_device_helpers():
-    assert pick_device().type in ("cpu", "cuda")
 
 
 def test_run_preprocess_cli(tmp_path):

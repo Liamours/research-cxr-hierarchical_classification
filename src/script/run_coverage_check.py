@@ -1,11 +1,11 @@
-"""Check label coverage across ingested datasets (excluding MIMIC-CXR).
+"""Check label coverage across ingested datasets.
 
 Reports positive count, applicable count, and prevalence per canonical label.
 Classifies each label as trainable / sparse / no-signal.
 
 Usage:
     uv run python src/script/run_coverage_check.py
-    uv run python src/script/run_coverage_check.py --exclude mimic-cxr vindr-pcxr
+    uv run python src/script/run_coverage_check.py --exclude vindr-pcxr
     uv run python src/script/run_coverage_check.py --min-positives 500
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ import pandas as pd
 from src.data.label_space import CANONICAL_LABELS
 
 REGISTRY = Path(__file__).resolve().parents[2] / "configs" / "dataset_registry.json"
-DEFAULT_EXCLUDE = {"mimic-cxr"}
+DEFAULT_EXCLUDE = set()
 
 
 def main() -> None:

@@ -9,6 +9,7 @@ eval_metrics_<split>.json into the run directory.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -17,8 +18,9 @@ from tqdm import tqdm
 
 from src.data.label_space import CANONICAL_LABELS
 from src.evaluate.calibration import compute_calibration
-from src.evaluate.metrics import compute_classification_metrics, compute_map
-from src.evaluate.selective import compute_aurc, coverage_accuracy
+from src.evaluate.metrics import (compute_classification_metrics, compute_confusion_metrics,
+                                   compute_map, hierarchy_violation_rate)
+from src.evaluate.selective import compute_aurc
 from src.model.mc_dropout import mc_dropout_predict, uncertainty_sanity_check
 
 
@@ -34,44 +36,54 @@ def evaluate_predictions(probs, targets, mask, conditions=CANONICAL_LABELS,
             report["f1"] = cm["f1"]
     if "ece" in metrics:
         report["calibration"] = compute_calibration(probs, targets, mask, n_bins, conditions)
-    if "selective" in metrics:
-        report["coverage_accuracy"] = coverage_accuracy(probs, targets, mask, threshold=threshold)
     if "map" in metrics:
         report["map"] = compute_map(probs, targets, mask, conditions)
     if "aurc" in metrics:
         report["aurc"] = compute_aurc(probs, targets, mask, conditions, threshold)
+    if "hcv" in metrics:
+        report["hcv"] = hierarchy_violation_rate(probs, conditions, threshold)
+    if "clf" in metrics:
+        report["clf"] = compute_confusion_metrics(probs, targets, mask, conditions, threshold)
     return report
 
 
 @torch.no_grad()
 def gather_predictions(model, loader, device, use_amp: bool = False, mc_passes: int = 0):
-    """Returns (image_ids, probs, targets, mask, var). var is None unless mc_passes > 0."""
+    """Returns (image_ids, probs, targets, mask, var, epistemic, aleatoric).
+    var/epistemic/aleatoric are None unless mc_passes > 0. var = epistemic +
+    aleatoric (total predictive variance; kept for the hierarchical fallback
+    gate and the sanity check, which operate on total uncertainty)."""
     model.eval()
     image_ids = []
-    probs, targets, masks, varis = [], [], [], []
+    probs, targets, masks, epis, aleas = [], [], [], [], []
     for batch in tqdm(loader, desc="eval gather", dynamic_ncols=True):
         x = batch["pixel_values"].to(device)
         image_ids.extend(batch["image_id"])
         if mc_passes > 0:
-            mean, var = mc_dropout_predict(model, x, mc_passes)
+            mean, epistemic, aleatoric = mc_dropout_predict(model, x, mc_passes)
             probs.append(mean.float().cpu())
-            varis.append(var.float().cpu())
+            epis.append(epistemic.float().cpu())
+            aleas.append(aleatoric.float().cpu())
         else:
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=use_amp):
                 logits = model(x)
             probs.append(torch.sigmoid(logits).float().cpu())
         targets.append(batch["labels"])
         masks.append(batch["label_mask"])
+    epistemic_cat = torch.cat(epis) if epis else None
+    aleatoric_cat = torch.cat(aleas) if aleas else None
+    var_cat = (epistemic_cat + aleatoric_cat) if epis else None
     return (
         image_ids,
         torch.cat(probs), torch.cat(targets), torch.cat(masks),
-        torch.cat(varis) if varis else None,
+        var_cat, epistemic_cat, aleatoric_cat,
     )
 
 
-def save_predictions(image_ids, probs, targets, mask, conditions, var, out_path) -> None:
+def save_predictions(image_ids, probs, targets, mask, conditions, var, out_path,
+                     epistemic=None, aleatoric=None) -> None:
     """Writes one row per sample: image_id, then prob_/label_/mask_<condition>
-    (+ var_<condition> when MC-Dropout variance is available)."""
+    (+ var_/epistemic_/aleatoric_<condition> when MC-Dropout is available)."""
     data: dict = {"image_id": image_ids}
     for j, c in enumerate(conditions):
         data[f"prob_{c}"] = probs[:, j].numpy()
@@ -79,9 +91,33 @@ def save_predictions(image_ids, probs, targets, mask, conditions, var, out_path)
         data[f"mask_{c}"] = mask[:, j].numpy()
         if var is not None:
             data[f"var_{c}"] = var[:, j].numpy()
+        if epistemic is not None:
+            data[f"epistemic_{c}"] = epistemic[:, j].numpy()
+        if aleatoric is not None:
+            data[f"aleatoric_{c}"] = aleatoric[:, j].numpy()
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(data).to_csv(out_path, index=False)
+
+
+def _log_eval_table(report: dict, logger, split: str) -> None:
+    """Log per-class metrics table to console for conditions with signal (non-NaN AUROC)."""
+    per_auroc = report.get("auroc", {}).get("per_class", {})
+    per_f1    = report.get("f1",   {}).get("per_class", {})
+    per_map   = report.get("map",  {}).get("per_class", {})
+    per_aurc  = report.get("aurc", {}).get("per_class", {})
+    conditions = [c for c, v in per_auroc.items() if not math.isnan(v)]
+    if not conditions:
+        return
+    conditions_sorted = sorted(conditions, key=lambda c: per_auroc[c], reverse=True)
+    header = f"{'condition':<35} {'AUROC':>6}  {'F1':>6}  {'mAP':>6}  {'AURC':>6}"
+    lines = [f"=== per-class metrics [{split}] ===", header, "-" * len(header)]
+    for c in conditions_sorted:
+        def _f(d):
+            v = d.get(c, float("nan"))
+            return f"{v:.4f}" if not math.isnan(v) else "  nan "
+        lines.append(f"{c:<35} {_f(per_auroc):>6}  {_f(per_f1):>6}  {_f(per_map):>6}  {_f(per_aurc):>6}")
+    logger.log("\n".join(lines))
 
 
 def _summary(report: dict) -> dict:
@@ -99,15 +135,22 @@ def _summary(report: dict) -> dict:
     if "aurc" in report:
         s["aurc_macro"] = report["aurc"]["macro"]
         s["aurc_flat"] = report["aurc"]["flat"]
+    if "hcv" in report:
+        s["hcv_rate"] = report["hcv"]["rate"]
+    if "clf" in report:
+        for agg in ("macro", "micro", "weighted"):
+            for k in ("precision", "recall", "specificity", "accuracy", "balanced_accuracy", "mcc"):
+                s[f"{k}_{agg}"] = report["clf"][agg][k]
+        s["subset_accuracy"] = report["clf"]["subset_accuracy"]
     return s
 
 
-def evaluate_model(model, loader, device, cfg, split: str = "val", logger=None) -> dict:
+def evaluate_model(model, loader, device, cfg, split: str = "val", logger=None, run_dir=None) -> dict:
     use_amp = cfg.training.bf16 and device.type == "cuda"
     mc_passes = cfg.uq.mc_passes if cfg.uq.method == "mc_dropout" else 0
     threshold = cfg.eval.threshold
     conditions = cfg.resolved_conditions()
-    image_ids, probs, targets, mask, var = gather_predictions(
+    image_ids, probs, targets, mask, var, epistemic, aleatoric = gather_predictions(
         model, loader, device, use_amp, mc_passes
     )
 
@@ -137,24 +180,30 @@ def evaluate_model(model, loader, device, cfg, split: str = "val", logger=None) 
         report["uq"] = {
             "mc_passes": mc_passes,
             "mean_variance": float(var[msel].mean()) if msel.any() else float("nan"),
+            "mean_epistemic": float(epistemic[msel].mean()) if msel.any() else float("nan"),
+            "mean_aleatoric": float(aleatoric[msel].mean()) if msel.any() else float("nan"),
             "sanity": sane,
         }
         if fallback_log is not None:
             report["uq"]["hierarchical_fallback"] = fallback_log
         summary["uq_mean_variance"] = report["uq"]["mean_variance"]
+        summary["uq_mean_epistemic"] = report["uq"]["mean_epistemic"]
+        summary["uq_mean_aleatoric"] = report["uq"]["mean_aleatoric"]
         summary["uq_sanity_passes"] = sane["passes"]
         if fallback_log is not None:
             summary["uq_fallback_suppressed"] = fallback_log["total_suppressed"]
 
-    run_dir = cfg.run_dir()
+    run_dir = Path(run_dir) if run_dir is not None else cfg.run_dir()
     run_dir.mkdir(parents=True, exist_ok=True)
     out = run_dir / f"eval_metrics_{split}.json"
     with open(out, "w", encoding="utf-8") as f:
         json.dump({"split": split, "summary": summary, "report": report}, f, indent=2, default=str)
 
     save_predictions(image_ids, probs, targets, mask, conditions, var,
-                      run_dir / "predictions" / f"{split}.csv")
+                      run_dir / "predictions" / f"{split}.csv",
+                      epistemic=epistemic, aleatoric=aleatoric)
 
     if logger is not None:
         logger.event("eval", split=split, **summary)
+        _log_eval_table(report, logger, split)
     return report

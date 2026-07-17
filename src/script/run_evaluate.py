@@ -28,8 +28,10 @@ def parse_args():
     p.add_argument("--config", required=True)
     p.add_argument("--checkpoint", default=None)
     p.add_argument("--ckpt-name", default="best_val_auroc_macro",
-                    choices=["last", "best_val_loss", "best_val_auroc_macro", "best_val_f1_macro"])
+                    choices=["last", "best_val_loss", "best_val_auroc_macro",
+                             "best_val_f1_macro", "best_val_aurc_macro"])
     p.add_argument("--split", default="val", choices=["train", "val", "test"])
+    p.add_argument("--run-dir", default=None, help="override run directory for checkpoint lookup and output")
     return p.parse_args()
 
 
@@ -40,9 +42,14 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = build_model_from_cfg(cfg, pretrained=False)  # weights from checkpoint
-    ckpt = Path(args.checkpoint) if args.checkpoint else cfg.run_dir() / "checkpoints" / f"{args.ckpt_name}.pt"
+    base_dir = Path(args.run_dir) if args.run_dir else cfg.run_dir()
+    ckpt = Path(args.checkpoint) if args.checkpoint else base_dir / "checkpoints" / f"{args.ckpt_name}.pt"
     if ckpt.exists():
-        model.load_state_dict(torch.load(ckpt, map_location="cpu", weights_only=True))
+        missing, unexpected = model.load_state_dict(
+            torch.load(ckpt, map_location="cpu", weights_only=True), strict=False
+        )
+        if unexpected:
+            print(f"  ignored keys (checkpoint-only buffers): {unexpected}")
         print(f"Loaded checkpoint: {ckpt}")
     else:
         print(f"WARNING: checkpoint not found ({ckpt}); evaluating randomly-initialized weights.")
@@ -54,8 +61,9 @@ def main():
         print(f"No data for split '{args.split}' at {cfg.data.label_csv}. Nothing to evaluate.")
         return
 
-    logger = RunLogger(cfg.run_dir(), level=cfg.logging.level)
-    report = evaluate_model(model, loader, device, cfg, split=args.split, logger=logger)
+    logger = RunLogger(base_dir, level=cfg.logging.level)
+    report = evaluate_model(model, loader, device, cfg, split=args.split, logger=logger,
+                            run_dir=args.run_dir)
 
     conditions = cfg.resolved_conditions()
     print(f"\n=== Evaluation ({args.split}) — {cfg.experiment.name} ===")
@@ -93,7 +101,7 @@ def main():
             v = report["aurc"]["per_class"].get(c, float("nan"))
             print(f"  {c:38s} {v:.4f}" if v == v else f"  {c:38s}   n/a")
 
-    print(f"\nWritten: {cfg.run_dir() / ('eval_metrics_' + args.split + '.json')}")
+    print(f"\nWritten: {base_dir / ('eval_metrics_' + args.split + '.json')}")
 
 
 if __name__ == "__main__":

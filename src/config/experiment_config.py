@@ -23,8 +23,8 @@ class ExperimentMeta:
 
 @dataclass
 class DataCfg:
-    dataset: str = "mimic-cxr"  # mimic-cxr | chexpert | nih-cxr14 | vindr-cxr
-    label_csv: Path = Path("data/preprocessed/labels/mimic-cxr.csv")
+    dataset: str = "combined"  # combined | chexpert | nih-cxr14 | vindr-cxr | ...
+    label_csv: Path = Path("dataset/combined/combined.csv")
     image_root: Path = Path("data/preprocessed/images")
     image_size: int = 224
     batch_size: int = 16
@@ -63,8 +63,16 @@ class ModelCfg:
 @dataclass
 class LabelCfg:
     """Factor 3 — label structure."""
-    label_structure: str = "flat"  # flat | hierarchical
+    label_structure: str = "flat"  # flat | hierarchical | bafl
     conditions: list = field(default_factory=list)  # empty = all CANONICAL_LABELS; non-empty = subset
+    lam: float = 0.5  # HBCE penalty weight (hierarchical only; 0 == flat)
+    # BAFL only (Balanced Adaptive Focal Loss, HP-ViT paper Sect. 3.3). Defaults
+    # are the paper's own values -- untuned for our label imbalance, see
+    # context/hpvit-bafl-ablation-proposal.md "Open questions".
+    bafl_beta: float = 0.999        # effective-number-of-samples decay (Cui et al. 2019)
+    bafl_gamma_init: float = 0.5    # focal exponent at epoch 0
+    bafl_gamma_final: float = 2.5   # focal exponent at epoch >= bafl_t_warmup
+    bafl_t_warmup: int = 30         # epochs to ramp gamma_init -> gamma_final
 
 
 @dataclass
@@ -166,6 +174,7 @@ class ExperimentConfig:
     xai: XaiCfg = field(default_factory=XaiCfg)
     paths: PathsCfg = field(default_factory=PathsCfg)
     logging: LoggingCfg = field(default_factory=LoggingCfg)
+    _run_date: str | None = field(default=None, init=False, repr=False, compare=False)
 
     @classmethod
     def from_yaml(cls, path: str | Path, overrides: dict[str, Any] | None = None) -> "ExperimentConfig":
@@ -234,7 +243,11 @@ class ExperimentConfig:
         return list(self.label.conditions) if self.label.conditions else list(CANONICAL_LABELS)
 
     def run_dir(self) -> Path:
-        return self.paths.result_root / f"{date.today():%Y%m%d}_{self.experiment.name}"
+        """Date is stamped once per instance so a run spanning midnight keeps
+        writing to the directory it started in; the name stays live."""
+        if self._run_date is None:
+            self._run_date = f"{date.today():%Y%m%d}"
+        return self.paths.result_root / f"{self._run_date}_{self.experiment.name}"
 
     def summary(self) -> str:
         data_desc = self.data.dataset

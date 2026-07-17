@@ -1,11 +1,10 @@
-"""Ingest MIMIC-CXR or CheXpert from the archive-preprocessed layout into the
+"""Ingest CheXpert from the archive-preprocessed layout into the
 canonical preprocessed layout used by the training pipeline.
 
 Source layout (archive-preprocessed):
   <dataset-root>/archive-preprocessed/<split>/p<patient>/s<study>/view1_frontal.png
   <dataset-root>/label/metadata_train.csv     (image_paths + CheXpert label cols)
   <dataset-root>/label/metadata_valid.csv
-  [MIMIC only] <dataset-root>/label/mimic-cxr-2.0.0-chexpert.csv
 
 Output layout (canonical preprocessed):
   <out-root>/images/<dataset>/<image_id>.png   224x224x3 uint8
@@ -14,11 +13,6 @@ Output layout (canonical preprocessed):
 Resume-safe: skips existing PNGs.
 
 Usage:
-    uv run python src/script/run_ingest_metadata.py ^
-        --dataset mimic-cxr ^
-        --dataset-root E:/research-cxr/dataset/mimic-cxr ^
-        --out-root E:/research-cxr/dataset/mimic-cxr/preprocessed
-
     uv run python src/script/run_ingest_metadata.py ^
         --dataset chexpert ^
         --dataset-root E:/research-cxr/dataset/chexpert ^
@@ -88,80 +82,6 @@ def _build_row(image_id: str, dataset: str, split: str, raw_labels: dict) -> dic
         else:
             row[c] = map_uncertain_value(raw_labels.get(c, float("nan")))
     return row
-
-
-def ingest_mimic(dataset_root: Path, out_root: Path, limit: int | None) -> None:
-    label_dir = dataset_root / "label"
-
-    meta = pd.concat(
-        [
-            pd.read_csv(label_dir / "metadata_train.csv"),
-            pd.read_csv(label_dir / "metadata_valid.csv"),
-        ],
-        ignore_index=True,
-    )
-    meta["study_id_int"] = meta["study_id"].str.lstrip("s").astype(int)
-
-    chex = pd.read_csv(label_dir / "mimic-cxr-2.0.0-chexpert.csv")
-    # index by study_id; handle rare duplicates by keeping first
-    chex = chex.drop_duplicates(subset="study_id").set_index("study_id")
-
-    dataset = "mimic-cxr"
-    img_dir = out_root / "images" / dataset
-    img_dir.mkdir(parents=True, exist_ok=True)
-
-    rows: list[dict] = []
-    skipped = missing = errors = 0
-
-    for _, row in tqdm(meta.iterrows(), total=len(meta), desc=f"ingest {dataset}"):
-        if str(row.get("has_image", "")).lower() != "true":
-            missing += 1
-            continue
-
-        try:
-            paths: list[str] = json.loads(row["image_paths"])
-        except (json.JSONDecodeError, TypeError):
-            missing += 1
-            continue
-
-        frontal = [p for p in paths if "frontal" in Path(p).stem.lower()]
-        if not frontal:
-            missing += 1
-            continue
-
-        src = archive_png(dataset_root, frontal[0])
-        if not src.exists():
-            missing += 1
-            continue
-
-        view_stem = Path(frontal[0]).stem  # e.g. view1_frontal
-        image_id = f"{row['patient_id']}_{row['study_id']}_{view_stem}"
-        dest = img_dir / f"{image_id}.png"
-
-        if not dest.exists():
-            try:
-                to_rgb_224(src).save(dest)
-            except Exception as e:
-                tqdm.write(f"ERROR {src}: {e}")
-                errors += 1
-                continue
-        else:
-            skipped += 1
-
-        study_id_int = row["study_id_int"]
-        raw_labels: dict = {}
-        if study_id_int in chex.index:
-            chex_row = chex.loc[study_id_int]
-            for chex_col, canon in CHEXPERT_LABEL_MAP.items():
-                raw_labels[canon] = chex_row.get(chex_col, float("nan"))
-
-        split = str(row["split"]).replace("valid", "val")
-        rows.append(_build_row(image_id, dataset, split, raw_labels))
-
-        if limit is not None and len(rows) >= limit:
-            break
-
-    _finish(rows, out_root, dataset, skipped, missing, errors)
 
 
 def ingest_chexpert(dataset_root: Path, out_root: Path, limit: int | None) -> None:
@@ -247,7 +167,7 @@ def _finish(rows, out_root, dataset, skipped, missing, errors):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", required=True, choices=["mimic-cxr", "chexpert"])
+    ap.add_argument("--dataset", required=True, choices=["chexpert"])
     ap.add_argument("--dataset-root", required=True)
     ap.add_argument("--out-root", required=True)
     ap.add_argument("--limit", type=int, default=None, help="cap rows (smoke test)")
@@ -256,10 +176,7 @@ def main() -> None:
     dataset_root = Path(args.dataset_root)
     out_root = Path(args.out_root)
 
-    if args.dataset == "mimic-cxr":
-        ingest_mimic(dataset_root, out_root, args.limit)
-    else:
-        ingest_chexpert(dataset_root, out_root, args.limit)
+    ingest_chexpert(dataset_root, out_root, args.limit)
 
 
 if __name__ == "__main__":

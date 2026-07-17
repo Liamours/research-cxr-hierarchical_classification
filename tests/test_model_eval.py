@@ -51,17 +51,18 @@ def test_masked_loss_ignores_nan_columns():
 
 def test_mc_dropout_mean_var():
     m = CxrClassifier("densenet121_xrv", pretrained=False)
-    mean, var = mc_dropout_predict(m, torch.randn(3, 1, 224, 224), n_passes=8)
+    mean, epistemic, aleatoric = mc_dropout_predict(m, torch.randn(3, 1, 224, 224), n_passes=8)
+    var = epistemic + aleatoric
     assert tuple(mean.shape) == (3, len(CANONICAL_LABELS)) and float(var.sum()) > 0
 
 
 def test_eval_no_refit(make_cfg):
     cfg = make_cfg(name="norefit")
     model = build_model_from_cfg(cfg, pretrained=False)
-    w = model.head.fc.weight.detach().clone()
+    w = model.head[1].weight.detach().clone()
     loaders = build_loaders(cfg)
     evaluate_model(model, loaders["val"], torch.device("cpu"), cfg, split="val")
-    assert torch.equal(model.head.fc.weight.detach(), w)
+    assert torch.equal(model.head[1].weight.detach(), w)
     assert (cfg.run_dir() / "predictions" / "val.csv").exists()
 
 

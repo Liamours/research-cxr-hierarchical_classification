@@ -38,7 +38,7 @@ def synth(tmp_path_factory):
 @pytest.fixture
 def make_cfg(synth):
     def _make(**kw):
-        c = ExperimentConfig.from_yaml("configs/flat_densenet_baseline.yaml")
+        c = ExperimentConfig.from_yaml("configs/densenet121_xrv__flat.yaml")
         c.experiment.name = kw.pop("name", f"t_{uuid.uuid4().hex[:8]}")
         c.model.pretrained = False
         c.data.label_csv = synth["csv"]

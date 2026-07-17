@@ -11,8 +11,8 @@ Features:
     stays eval/inference-only) + 5-sample prediction-vs-ground-truth display
   - all metrics logged through RunLogger (train_log.csv + events.jsonl + gpu mem)
   - checkpoints: run_dir/checkpoints/{last,best_val_loss,best_val_auroc_macro,
-    best_val_f1_macro}.pt + matching *_meta.json; last overwritten every
-    epoch, best_* only on strict improvement
+    best_val_f1_macro,best_val_aurc_macro}.pt + matching *_meta.json; last
+    overwritten every epoch, best_* only on strict improvement
   - early stopping on val loss
 """
 
@@ -27,10 +27,9 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 
-from src.evaluate.evaluator import gather_predictions
-from src.evaluate.metrics import compute_classification_metrics
+from src.evaluate.evaluator import evaluate_predictions, gather_predictions
+from src.model.classifier import model_profile
 from src.train.losses import build_loss
-from src.util.device import bf16_supported
 
 
 class MultiLabelTrainer:
@@ -42,15 +41,26 @@ class MultiLabelTrainer:
         self.device = device
         self.logger = logger
         self.conditions = conditions if conditions is not None else cfg.resolved_conditions()
+        bafl_weights = None
+        if cfg.label.label_structure == "bafl":
+            from src.train.losses import train_class_weights
+            bafl_weights = train_class_weights(cfg.data.label_csv, self.conditions,
+                                               beta=cfg.label.bafl_beta)
         self.criterion = build_loss(
             cfg.label.label_structure,
             self.conditions,
-        )
-        self.use_amp = cfg.training.bf16 and bf16_supported(device)
+            lam=cfg.label.lam,
+            bafl_weights=bafl_weights,
+            bafl_gamma_init=cfg.label.bafl_gamma_init,
+            bafl_gamma_final=cfg.label.bafl_gamma_final,
+            bafl_t_warmup=cfg.label.bafl_t_warmup,
+        ).to(device)
+        self.use_amp = cfg.training.bf16 and torch.cuda.is_available() and torch.cuda.is_bf16_supported()
         self._best_ckpt = {
             "val_loss": float("nan"),
             "val_auroc_macro": float("nan"),
             "val_f1_macro": float("nan"),
+            "val_aurc_macro": float("nan"),
         }
         self._build_optim()
 
@@ -82,6 +92,8 @@ class MultiLabelTrainer:
         t = self.cfg.training
         self.model.train()
         self._set_backbone_frozen(epoch <= t.freeze_backbone_epochs)
+        if hasattr(self.criterion, "set_epoch"):
+            self.criterion.set_epoch(epoch)
         total_loss = bce_sum = penalty_sum = 0.0
         grad_norm_sum = grad_norm_max = 0.0
         nb = n_updates = 0
@@ -122,9 +134,11 @@ class MultiLabelTrainer:
 
     @torch.no_grad()
     def _eval_epoch(self) -> dict[str, float]:
+        nan = float("nan")
         if self.val_loader is None:
-            return {"val_loss": float("nan"), "val_auroc_macro": float("nan"),
-                    "val_f1_macro": float("nan")}
+            return {k: nan for k in ("val_loss", "val_auroc_macro", "val_auroc_micro",
+                                     "val_f1_macro", "val_f1_micro", "val_map_macro",
+                                     "val_aurc_macro", "val_ece")}
         self.model.eval()
         total, nb = 0.0, 0
         for batch in tqdm(self.val_loader, desc="val", dynamic_ncols=True):
@@ -137,16 +151,26 @@ class MultiLabelTrainer:
             nb += 1
         val_loss = total / max(nb, 1)
 
-        # Single deterministic pass (mc_passes=0) for AUROC/F1 -- MC Dropout
-        # stays eval/inference-only, see module docstring.
+        # Single deterministic pass (mc_passes=0) -- MC Dropout stays eval/inference-only.
         _, probs, targets, mask, *_ = gather_predictions(
             self.model, self.val_loader, self.device, self.use_amp, mc_passes=0
         )
-        cm = compute_classification_metrics(probs, targets, mask, self.conditions)
+        report = evaluate_predictions(
+            probs, targets, mask,
+            conditions=self.conditions,
+            threshold=self.cfg.eval.threshold,
+            n_bins=self.cfg.eval.reliability_bins,
+            metrics=self.cfg.eval.metrics,
+        )
         return {
-            "val_loss": val_loss,
-            "val_auroc_macro": cm["auroc"]["macro"],
-            "val_f1_macro": cm["f1"]["macro"],
+            "val_loss":        val_loss,
+            "val_auroc_macro": report.get("auroc", {}).get("macro", nan),
+            "val_auroc_micro": report.get("auroc", {}).get("micro", nan),
+            "val_f1_macro":    report.get("f1", {}).get("macro", nan),
+            "val_f1_micro":    report.get("f1", {}).get("micro", nan),
+            "val_map_macro":   report.get("map", {}).get("macro", nan),
+            "val_aurc_macro":  report.get("aurc", {}).get("macro", nan),
+            "val_ece":         report.get("calibration", {}).get("ece", nan),
         }
 
     @torch.no_grad()
@@ -179,12 +203,26 @@ class MultiLabelTrainer:
                 break
         self.model.train()
 
-    def _save_checkpoint(self, name: str, epoch: int, val: dict[str, float]):
+    def _save_checkpoint(self, name: str, epoch: int, val: dict[str, float], retries: int = 3):
+        """Atomic, retrying save: write to a temp file then rename, so a transient
+        disk I/O error can neither corrupt an existing checkpoint nor abort the run."""
         ckpt_dir = self.cfg.run_dir() / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        torch.save(self.model.state_dict(), ckpt_dir / f"{name}.pt")
-        meta = {"epoch": epoch, **val}
-        (ckpt_dir / f"{name}_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        dst = ckpt_dir / f"{name}.pt"
+        tmp = ckpt_dir / f"{name}.pt.tmp"
+        for attempt in range(1, retries + 1):
+            try:
+                torch.save(self.model.state_dict(), tmp)
+                tmp.replace(dst)  # atomic on same filesystem
+                (ckpt_dir / f"{name}_meta.json").write_text(
+                    json.dumps({"epoch": epoch, **val}, indent=2), encoding="utf-8")
+                return
+            except (OSError, RuntimeError) as e:
+                tmp.unlink(missing_ok=True)
+                self.logger.log(f"WARN checkpoint '{name}' save failed "
+                                f"(attempt {attempt}/{retries}): {e}")
+                time.sleep(1.0)
+        self.logger.log(f"ERROR checkpoint '{name}' not saved after {retries} attempts; continuing")
 
     def _is_better(self, metric: str, value: float) -> bool:
         if math.isnan(value):
@@ -192,11 +230,12 @@ class MultiLabelTrainer:
         current = self._best_ckpt[metric]
         if math.isnan(current):
             return True
-        return value < current if metric == "val_loss" else value > current
+        lower_is_better = {"val_loss", "val_aurc_macro"}
+        return value < current if metric in lower_is_better else value > current
 
     def _save_checkpoints(self, epoch: int, val: dict[str, float]):
         self._save_checkpoint("last", epoch, val)
-        for metric in ("val_loss", "val_auroc_macro", "val_f1_macro"):
+        for metric in ("val_loss", "val_auroc_macro", "val_f1_macro", "val_aurc_macro"):
             if self._is_better(metric, val[metric]):
                 self._best_ckpt[metric] = val[metric]
                 self._save_checkpoint(f"best_{metric}", epoch, val)
@@ -207,7 +246,24 @@ class MultiLabelTrainer:
             f"train {self.cfg.experiment.name} backbone={self.cfg.model.backbone} "
             f"epochs={t.epochs} device={self.device}"
         )
-        self.logger.event("param_counts", **self.model.param_counts())
+        extra = 0
+        if self.cfg.seg.enabled:
+            from src.data.segmentation import seg_extra_channels as _seg_extra
+            extra = _seg_extra(self.cfg.seg.method)
+        profile = model_profile(
+            self.model,
+            seg_extra_channels=extra,
+            device=self.device,
+            run_dir=self.cfg.run_dir(),
+        )
+        self.logger.log(
+            f"model  total={profile['total']:,}  trainable={profile['trainable']:,}  "
+            f"backbone={profile['backbone']:,}  head={profile['head']:,}  "
+            f"gmacs={profile['gmacs']}  params_mb={profile['params_mb']}  "
+            f"-> {self.cfg.run_dir()}/model_summary.txt"
+        )
+        self.logger.event("model_profile", **{k: v for k, v in profile.items()
+                                               if k != "summary_str"})
 
         best = float("inf")
         patience = 0
@@ -221,28 +277,41 @@ class MultiLabelTrainer:
             val_loss = val["val_loss"]
             elapsed = time.time() - t0
 
+            def _fmt(v):
+                return f"{v:.4f}" if v == v else "nan"  # nan != nan
+            gamma_str = f"gamma={self.criterion.gamma:.3f}  " if hasattr(self.criterion, "gamma") else ""
             self.logger.log(
                 f"epoch {epoch}/{t.epochs}  "
                 f"loss={train_loss:.4f}  bce={train_stats['bce']:.4f}  "
-                f"penalty={train_stats['penalty']:.4f}  "
+                f"penalty={train_stats['penalty']:.4f}  {gamma_str}"
                 f"gnorm={train_stats['grad_norm_mean']:.3f}(max={train_stats['grad_norm_max']:.3f})  "
                 f"val_loss={val_loss:.4f}  "
-                f"auroc={val['val_auroc_macro']:.4f}  f1={val['val_f1_macro']:.4f}  "
+                f"auroc={_fmt(val['val_auroc_macro'])}(micro={_fmt(val['val_auroc_micro'])})  "
+                f"f1={_fmt(val['val_f1_macro'])}(micro={_fmt(val['val_f1_micro'])})  "
+                f"map={_fmt(val['val_map_macro'])}  aurc={_fmt(val['val_aurc_macro'])}  "
+                f"ece={_fmt(val['val_ece'])}  "
                 f"{elapsed:.0f}s"
             )
 
             print("  [val samples]")
             self._show_val_samples(self.cfg.logging.val_display_rows)
+            def _r(v):
+                return round(v, 4) if v == v else None  # None serialises as null; nan != nan
             self.logger.log_epoch({
                 "epoch": epoch,
-                "train_loss": round(train_loss, 4),
-                "train_bce": round(train_stats["bce"], 4),
-                "train_hbce_penalty": round(train_stats["penalty"], 4),
-                "grad_norm_mean": round(train_stats["grad_norm_mean"], 4),
-                "grad_norm_max": round(train_stats["grad_norm_max"], 4),
-                "val_loss": round(val_loss, 4),
-                "val_auroc_macro": round(val["val_auroc_macro"], 4),
-                "val_f1_macro": round(val["val_f1_macro"], 4),
+                "train_loss": _r(train_loss),
+                "train_bce": _r(train_stats["bce"]),
+                "train_hbce_penalty": _r(train_stats["penalty"]),
+                "grad_norm_mean": _r(train_stats["grad_norm_mean"]),
+                "grad_norm_max": _r(train_stats["grad_norm_max"]),
+                "val_loss": _r(val["val_loss"]),
+                "val_auroc_macro": _r(val["val_auroc_macro"]),
+                "val_auroc_micro": _r(val["val_auroc_micro"]),
+                "val_f1_macro": _r(val["val_f1_macro"]),
+                "val_f1_micro": _r(val["val_f1_micro"]),
+                "val_map_macro": _r(val["val_map_macro"]),
+                "val_aurc_macro": _r(val["val_aurc_macro"]),
+                "val_ece": _r(val["val_ece"]),
                 "lr_backbone": self.optimizer.param_groups[0]["lr"],
                 "lr_head": self.optimizer.param_groups[1]["lr"],
                 "elapsed_s": round(elapsed, 1),
@@ -259,6 +328,14 @@ class MultiLabelTrainer:
                     self.logger.log(f"early stop at epoch {epoch}")
                     break
 
-        self.logger.final_metrics({"best_val_loss": round(best, 4), "epochs_ran": last_epoch})
+        def _rb(v):
+            return round(v, 4) if v == v else None
+        self.logger.final_metrics({
+            "best_val_loss":        _rb(self._best_ckpt["val_loss"]),
+            "best_val_auroc_macro": _rb(self._best_ckpt["val_auroc_macro"]),
+            "best_val_f1_macro":    _rb(self._best_ckpt["val_f1_macro"]),
+            "best_val_aurc_macro":  _rb(self._best_ckpt["val_aurc_macro"]),
+            "epochs_ran": last_epoch,
+        })
         self.logger.log(f"done. best_val_loss={best:.4f}")
         return best
