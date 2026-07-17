@@ -1,0 +1,148 @@
+\documentclass[a4paper,11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{booktabs}
+\usepackage{mathptmx}
+\usepackage{amsmath}
+\usepackage{caption}
+\usepackage{multirow}
+
+\captionsetup[table]{labelsep=newline, font=footnotesize, labelfont=normalfont, textfont={footnotesize,sc}, justification=centering}
+\renewcommand{\thetable}{\Roman{table}}
+\renewcommand{\tablename}{TABLE}
+
+\pagestyle{empty}
+
+\begin{document}
+
+\begin{center}
+\captionof{table}{Validation and Test Performance Across the Six Ablation Runs}
+\label{tab:val-test-results}
+
+\footnotesize
+\renewcommand{\arraystretch}{1.5}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{l cc cc}
+\toprule
+ & \multicolumn{2}{c}{Validation} & \multicolumn{2}{c}{Test} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+Model & AUC & F1 & AUC & F1 \\
+\midrule
+Flat                                  & 0.8108          & 0.1889          & 0.7875          & 0.1178 \\
+Flat, MC-Dropout                      & 0.8122          & 0.1894          & \textbf{0.7881} & 0.1186 \\
+Hierarchical, $\lambda$=0.5           & 0.7891          & 0.1383          & 0.7679          & 0.0951 \\
+Hierarchical, MC-Dropout, $\lambda$=0.5 & 0.7932        & 0.1279          & 0.7748          & 0.0908 \\
+Hierarchical, $\lambda$=0.1           & \textbf{0.8150} & \textbf{0.1909} & 0.7721          & 0.1183 \\
+Hierarchical, $\lambda$=1.0           & 0.7896          & 0.1740          & 0.7832          & \textbf{0.1196} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{4pt}
+\footnotesize\textit{Bold marks the best value per column within each split.}
+
+\vspace{24pt}
+
+\begin{center}
+\captionof{table}{Per-Label Positive Counts and Performance for Flat, MC-Dropout}
+\label{tab:per-label-flat-mc}
+
+\footnotesize
+\renewcommand{\arraystretch}{1.4}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c ccc ccc}
+\toprule
+ & Train & \multicolumn{3}{c}{Validation} & \multicolumn{3}{c}{Test} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8}
+Label & n & n & AUC & F1 & n & AUC & F1 \\
+\midrule
+COVID19 Pneumonia         & 57,198 & 4,241 & 0.9642 & 0.9245 & 4,241 & 0.6619          & 0.6823 \\
+Tuberculosis              & 613    & 201   & 0.9592 & 0.5000 & 1     & 0.9563$^\S$      & 0.0000$^\S$ \\
+Cardiomegaly              & 29,013 & 346   & 0.9369 & 0.4667 & 1,069 & 0.8792          & 0.2092 \\
+Pulmonary Edema           & 50,898 & 170   & 0.9147 & 0.2143 & 925   & 0.7815          & 0.0000 \\
+Pleural Effusion          & 86,774 & 946   & 0.8999 & 0.4587 & 4,658 & 0.8089          & 0.3975 \\
+Diaphragmatic Hernia      & 122    & 22    & 0.8799 & 0.2963 & 86    & 0.9151          & 0.3178 \\
+Pneumothorax              & 18,338 & 268   & 0.8596 & 0.0074 & 2,665 & 0.8160          & 0.0000 \\
+ILD                       & 2,132  & 258   & 0.8488 & 0.0602 & 435   & 0.7535          & 0.0000 \\
+Pneumonia                 & 5,261  & 181   & 0.8108 & 0.0415 & 725   & 0.7199          & 0.0267 \\
+Atelectasis               & 37,191 & 928   & 0.8088 & 0.0107 & 3,279 & 0.7377          & 0.0127 \\
+COPD                      & 1,313  & 110   & 0.8050 & 0.0000 & 1,093 & 0.7739          & 0.0000 \\
+Solitary Pulmonary Nodule & 14,659 & 869   & 0.7750 & 0.2390 & 3,052 & 0.7423          & 0.2517 \\
+Chest Trauma              & 7,009  & 11    & 0.7667 & 0.0000 & 0     & --              & -- \\
+Acute Bronchitis          & 770    & 72    & 0.7354 & 0.0000 & 174   & 0.7062          & 0.0000 \\
+Bronchiolitis             & 444    & 53    & 0.6439 & 0.0000 & 90    & 0.6640          & 0.0000 \\
+Lung Cancer               & 3      & 2     & 0.3872 & 0.0000 & 0     & --              & -- \\
+Mediastinal Tumor         & 8      & 0     & --     & --     & 1     & 0.9054$^\S$      & 0.0000$^\S$ \\
+\midrule
+Total $n$                 & 311,746 & 8,678 &       &        & 22,494 &                &        \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{4pt}
+\footnotesize\textit{17 labels total; the other 34 canonical labels have 0 positives in all splits. ``n'' is the positive-case count for that label in that split (Train has no evaluation metric). ``Total $n$'' sums positives across labels, not unique images --- a multi-label image is counted once per positive label. ``--'' denotes $n=0$ on that split. Sorted by validation AUC, descending. $^\S$ Test split has only 1 positive case for this label --- AUC and F1 here are single-example statistics with no meaningful variance estimate, not reliable measures of generalization, and should not be compared directly against labels with substantial positive counts (e.g.\ Cardiomegaly, $n=1069$).}
+
+\vspace{24pt}
+
+\begin{center}
+\captionof{table}{Comparison with Published Baselines per Dataset}
+\label{tab:literature-comparison}
+
+\footnotesize
+\renewcommand{\arraystretch}{1.4}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{l l c c c}
+\toprule
+Dataset & Published baseline & Scope & Baseline AUC & Ours (test) \\
+\midrule
+\multirow{2}{*}{NIH ChestX-ray14}
+  & Wang et al. (2017), original           & 14 labels & 0.745 & \multirow{2}{*}{0.787} \\
+  & Rajpurkar et al. (2017), CheXNet       & 14 labels & 0.841 & \\
+\midrule
+CheXpert+           & Irvin et al. (2019), original    & 5 labels  & 0.907          & -- \\
+\midrule
+COVIDx-CXR4         & Various binary classifiers (2023--24) & binary    & $\geq$0.99     & 0.662 \\
+\midrule
+VinDr-CXR           & Later work, large private corpus & 6 labels  & 0.967          & -- \\
+\midrule
+VinDr-PCXR          & No published AUC baseline found & --        & --             & 0.787 \\
+\midrule
+\multirow{2}{*}{TBX11K}
+  & Liu et al. (2020), original (accuracy only) & binary    & 89.7\% acc.    & \multirow{2}{*}{--} \\
+  & Later reproductions, various subsets  & binary    & 0.93--0.998    & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{4pt}
+\footnotesize\textit{``Ours'' is per-dataset macro AUC recomputed from raw test predictions (Flat, MC-Dropout), joining image\_id to the source dataset --- not the pooled per-label numbers in Table II. ``--'' means either the dataset has no test rows in this pipeline (CheXpert, VinDr-CXR, TBX11K) or no comparable literature value was found. Scope differs substantially across rows (fewer labels, single-task binary framing, or much larger private training data) --- this is context, not a controlled comparison.}
+
+\vspace{24pt}
+
+\begin{center}
+\captionof{table}{F1 Availability in Published Baselines (Verified Against Primary Sources)}
+\label{tab:f1-availability}
+
+\footnotesize
+\renewcommand{\arraystretch}{1.4}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{2.6cm} p{1.7cm} p{4.6cm} c c}
+\toprule
+Paper & Count & Label list & AUC & F1 \\
+\midrule
+Wang et al. (2017), original & 14 & Atelectasis, Cardiomegaly, Consolidation, Edema, Effusion, Emphysema, Fibrosis, Hernia, Infiltration, Mass, Nodule, Pleural Thickening, Pneumonia, Pneumothorax & 0.745 (macro) & not reported \\
+Rajpurkar et al. (2017), CheXNet & 14 & Atelectasis, Cardiomegaly, Consolidation, Edema, Effusion, Emphysema, Fibrosis, Hernia, Infiltration, Mass, Nodule, Pleural Thickening, Pneumonia, Pneumothorax & 0.841 (macro) & not reported$^{*}$ \\
+Irvin et al. (2019), CheXpert & 5$^\ddagger$ & Atelectasis, Cardiomegaly, Consolidation, Edema, Pleural Effusion & 0.908 (mean, test) & not reported \\
+Nguyen et al. (2022), VinDr-CXR & 28 (22 local + 6 global) & \textit{Local:} Aortic enlargement, Atelectasis, Cardiomegaly, Calcification, Clavicle fracture, Consolidation, Edema, Emphysema, Enlarged PA, ILD, Infiltration, Lung cavity, Lung cyst, Lung opacity, Mediastinal shift, Nodule/Mass, Pulmonary fibrosis, Pneumothorax, Pleural thickening, Pleural effusion, Rib fracture, Other lesion. \textit{Global:} Lung tumor, Pneumonia, Tuberculosis, Other diseases, COPD, No finding. & not reported$^{\dagger\dagger}$ & not reported$^{\dagger\dagger}$ \\
+Wang et al. (2023), COVIDx-CXR4 & binary & COVID-19 positive vs.\ negative (single binary label) & not reported$^{\dagger\dagger}$ & not reported$^{\dagger\dagger}$ \\
+Liu et al. (2020), TBX11K & binary & tuberculosis vs.\ non-tuberculosis (single binary label) & not confirmed$^{\ddagger\ddagger}$ & not found$^{\ddagger\ddagger}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{4pt}
+\footnotesize\textit{$^\ddagger$ 5 of CheXpert's 14 labeled observations, selected for the main radiologist-comparison benchmark. $^{*}$ CheXNet reports F1$=$0.435 only for a separate binary pneumonia-only sub-study against 4 radiologists on a different 420-image test set --- not for the 14-label benchmark in the AUC column. $^{\dagger\dagger}$ this paper is a dataset descriptor only (verified by reading the full text, incl.\ Table 3 of its supplementary materials); it contains no classification benchmark of its own --- any AUC figure attributed to this dataset elsewhere (e.g. Table IV) comes from a separate downstream paper. $^{\ddagger\ddagger}$ the original paper's own tables reportedly use Accuracy/Sensitivity/Specificity/AUC(TB), per secondary sources; direct primary-source verification was blocked (CVF site returned HTTP 403); F1 was not found in any source checked.}
+
+\end{document}

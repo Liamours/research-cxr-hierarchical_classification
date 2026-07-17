@@ -1,0 +1,21 @@
+PadChest
+========
+Status: NOT ingested. Folder scaffold prepared at dataset/padchest/ (raw/, preprocessed/images/padchest/, preprocessed/labels/). No data downloaded yet — requires signed Research Use Agreement.
+
+Official source:      http://bimcv.cipf.es/bimcv-projects/padchest/
+Research Use Agreement: https://bimcv.cipf.es/bimcv-projects/padchest/padchest-dataset-research-use-agreement/
+Original paper (arXiv): https://arxiv.org/abs/1901.07441
+Original paper (journal, Medical Image Analysis 2020): https://www.sciencedirect.com/science/article/abs/pii/S1361841520301614
+Processing code / label extraction repo: https://github.com/auriml/Rx-thorax-automatic-captioning
+TorchXRayVision dataset docs (our backbone was pretrained partly on PadChest): https://mlmed.org/torchxrayvision/datasets.html
+Kaggle sample mirrors (subset only, no agreement needed):
+  https://www.kaggle.com/datasets/raddar/padchest-chest-xrays-sample
+  https://www.kaggle.com/datasets/seoyunje/padchest-small-dataset
+  https://www.kaggle.com/datasets/chandanverma/padchest
+
+Master label file (inside full download): PADCHEST_chest_x_ray_images_labels_160K.csv (33 fields/study)
+Label taxonomy file: tree_term_CUI_counts_160K.csv (UMLS CUI-mapped hierarchy)
+
+Scale: 160,000+ images, 67,000 patients, Hospital San Juan (Spain), 2009-2017, 6 position views, ~1.02 TB full download
+Labels: 174 radiographic findings, 19 differential diagnoses, 104 anatomic locations (UMLS-mapped hierarchical taxonomy)
+Note: label mapping to our 51 canonical labels has NOT been done yet (flagged in reference/methods_papers.json as a known gap).

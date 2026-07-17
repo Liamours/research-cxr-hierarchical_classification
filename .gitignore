@@ -26,6 +26,7 @@ wheels/
 # Data directory at repo root (medical images, label CSVs, preprocessed files)
 # Leading slash = root-only match; does NOT exclude src/data/
 /data/
+/dataset/
 
 # Third-party reference repos (cloned, not owned by this project)
 external/
@@ -72,3 +73,25 @@ attic/
 *.pth
 *.safetensors
 *.bin
+
+# Configs (training/grid/dataset-registry configs, not for public release)
+configs/
+
+# Per-image prediction/ground-truth exports (dataset-adjacent, large binary)
+document/*.xlsx
+document/localization_bboxes_*.yaml
+
+# Stale internal analysis bundle (superseded, contains configs + large csvs)
+analysis_export/
+
+# Personal notes (advisor meetings, working-hours reconstructed from AI session activity)
+docs/notes/
+
+# One-off personal download helper (hardcoded PhysioNet username)
+scripts/download_vindr_cxr_test.ps1
+
+# LaTeX build artifacts
+document/latex/*.aux
+document/latex/*.log
+document/latex/*.fls
+document/latex/*.fdb_latexmk
