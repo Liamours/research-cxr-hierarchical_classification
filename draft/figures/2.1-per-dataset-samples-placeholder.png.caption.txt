@@ -1,1 +1,0 @@
-Placeholder for a grid of one representative image per pooled dataset. Every real image available locally comes from NIH ChestX-ray14 only, so this cannot yet be populated from the other six datasets.

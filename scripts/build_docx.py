@@ -53,10 +53,10 @@ class Counters:
 
 # Per-figure override width in inches, keyed by filename. Default is 4.5in.
 FIGURE_WIDTH = {
-    "3.1-reliability-diagram.png": 3.0,
-    "3.1-risk-coverage-curve.png": 3.0,
-    "3.1-low-auroc-error-analysis.png": 6.5,
-    "3.2-gradcam-qualitative.png": 6.2,
+    "2.2-hierarchy-diagram.png": 6.5,
+    "2.3-training-curves.png": 6.5,
+    "3.1-reliability-and-risk-coverage.png": 6.5,
+    "3.2-gradcam-qualitative.png": 6.5,
 }
 
 
@@ -295,6 +295,8 @@ def add_table(doc: Document, counters: Counters, csv_path: Path):
     table = doc.add_table(rows=1, cols=len(header))
     for cell, text in zip(table.rows[0].cells, display_header):
         cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cell.paragraphs[0].paragraph_format.space_before = Pt(0)
+        cell.paragraphs[0].paragraph_format.space_after = Pt(0)
         run = cell.paragraphs[0].add_run(text)
         run.bold = True
         run.font.name = "Times New Roman"
@@ -312,6 +314,8 @@ def add_table(doc: Document, counters: Counters, csv_path: Path):
             cell.paragraphs[0].alignment = (
                 WD_ALIGN_PARAGRAPH.CENTER if (row_wise or i > 0) else WD_ALIGN_PARAGRAPH.LEFT
             )
+            cell.paragraphs[0].paragraph_format.space_before = Pt(0)
+            cell.paragraphs[0].paragraph_format.space_after = Pt(0)
             run = cell.paragraphs[0].add_run(text)
             run.font.name = "Times New Roman"
             run.font.size = Pt(9)

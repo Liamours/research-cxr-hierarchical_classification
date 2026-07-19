@@ -3,7 +3,7 @@ AUROC macro,0.6954,0.6872
 AUROC micro,0.9048,0.9025
 mAP macro,0.1999,0.1986
 AURC macro (lower is better),0.0145,0.0170
-AURC flat (lower is better),0.0101,0.0105
+AURC micro (lower is better),0.0101,0.0105
 ECE (lower is better),0.0044,0.0055
 Hierarchy violation rate percent (lower is better),39.27,36.53
 F1 macro,0.1173,0.1107

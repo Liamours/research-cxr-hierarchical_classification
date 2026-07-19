@@ -1,1 +1,0 @@
-Placeholder for a grid of representative frontal chest radiographs from the pooled corpus, to be added once source images are available.

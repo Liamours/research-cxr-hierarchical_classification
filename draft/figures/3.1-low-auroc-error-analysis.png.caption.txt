@@ -1,1 +1,0 @@
-Empirical cumulative distribution of the flat model's predicted probability on a log scale, split by true label, for the three weakest discriminated findings on the test partition. True negative and true positive counts are 11,096 and 3 for hydropneumothorax, 11,088 and 11 for pulmonary hypertension, and 10,947 and 152 for bronchiectasis.

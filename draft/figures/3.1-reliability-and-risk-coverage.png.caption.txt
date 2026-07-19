@@ -1,0 +1,1 @@
+Left: reliability diagram comparing the flat and hierarchical conditions on the test partition, plotting predicted confidence against empirical positive rate across 15 bins. Right: risk-coverage curve for the same two conditions on the test partition, plotting risk against coverage at 20 confidence-sorted points.

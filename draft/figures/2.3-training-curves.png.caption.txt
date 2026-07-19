@@ -1,0 +1,1 @@
+Training and validation loss, and validation macro AUROC, across all 15 training epochs for the flat and hierarchical conditions.

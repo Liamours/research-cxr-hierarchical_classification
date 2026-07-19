@@ -1,1 +1,0 @@
-Test images where the flat model most confidently missed a truly present finding, one per mapped finding, selected as the lowest predicted probability among true positives with a bounding box annotation. Ground truth box in green.
