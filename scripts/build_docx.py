@@ -40,7 +40,7 @@ SYMBOLS = {
 
 # Front matter with no drafted content yet -- placeholders only, in paper order.
 # Remove an entry here once its real draft/sections/*.md file exists.
-FRONT_MATTER_PLACEHOLDERS = ["Authors", "Abstract", "Keywords", "Introduction", "Literature Review"]
+FRONT_MATTER_PLACEHOLDERS = ["Authors", "Abstract", "Keywords", "Introduction"]
 END_MATTER_PLACEHOLDERS = ["Conclusion"]
 
 
@@ -370,22 +370,41 @@ def add_placeholder_section(doc: Document, title: str):
     run.font.size = Pt(11)
 
 
+BIB_FIELD_RE = re.compile(r"(\w+)\s*=\s*\{([^{}]*)\}")
+BIB_ENTRY_START_RE = re.compile(r"@(\w+)\s*\{([^,]+),")
+
+
+def format_authors(raw: str) -> str:
+    names = [n.strip() for n in raw.split(" and ") if n.strip()]
+    if len(names) <= 1:
+        return raw
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return ", ".join(names[:-1]) + f", and {names[-1]}"
+
+
+def format_bib_entry(raw_entry: str) -> str:
+    # ponytail: enough BibTeX parsing for our own consistently-formatted
+    # entries (flat {value} fields, no nested braces) -- not a general parser.
+    fields = {k.lower(): re.sub(r"\s+", " ", v).strip() for k, v in BIB_FIELD_RE.findall(raw_entry)}
+    author = format_authors(fields.get("author", ""))
+    title = fields.get("title", "")
+    venue = fields.get("journal") or fields.get("booktitle") or fields.get("publisher") or ""
+    year = fields.get("year", "")
+    note = fields.get("note", "")
+    parts = [author, f'"{title}"' if title else "", venue, year, note]
+    return ", ".join(p for p in parts if p) + "."
+
+
 def add_references(doc: Document):
-    csv_files = list(REFERENCES.glob("*.csv"))
     bib_files = list(REFERENCES.glob("*.bib"))
     entries = []
-    if csv_files:
-        with open(csv_files[0], newline="", encoding="utf-8") as f:
-            rows = list(csv.reader(f))
-        for row in rows[1:] if rows and rows[0] and rows[0][-1].lower() == "citation" else rows:
-            if row:
-                entries.append(row[-1])
-    elif bib_files:
+    if bib_files:
         raw = bib_files[0].read_text(encoding="utf-8")
-        for entry in re.split(r"\n(?=@)", raw):
-            entry = entry.strip()
-            if entry:
-                entries.append(re.sub(r"\s+", " ", entry))
+        for raw_entry in re.split(r"\n(?=@)", raw):
+            raw_entry = raw_entry.strip()
+            if raw_entry:
+                entries.append(format_bib_entry(raw_entry))
 
     doc.add_heading("References", level=1)
     if not entries:

@@ -1,8 +1,8 @@
 This section describes the label space and hierarchy, the pooled dataset and
 preprocessing pipeline, the model and training procedure for the two conditions
-actually trained, and the evaluation protocol. Subsection 2.1 covers the
-dataset and preprocessing, subsection 2.2 the label hierarchy, subsection 2.3
-the model and training objective, and subsection 2.4 the evaluation protocol.
+actually trained, and the evaluation protocol. Subsection 3.1 covers the
+dataset and preprocessing, subsection 3.2 the label hierarchy, subsection 3.3
+the model and training objective, and subsection 3.4 the evaluation protocol.
 
 All experiments use a single backbone, DenseNet121 pretrained on chest
 radiographs via TorchXRayVision, and vary only the training loss between the

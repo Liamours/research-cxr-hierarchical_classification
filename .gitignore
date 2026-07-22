@@ -106,3 +106,8 @@ document/latex/*.fdb_latexmk
 # truth is draft/sections + draft/equations + draft/tables + draft/figures)
 draft/manuscript/*.docx
 draft/manuscript/*.pdf
+
+# IEEE template kit is a static resource, not build output or dataset files —
+# override the blanket *.pdf / *.png excludes for this folder only
+!draft/manuscript/template/**
+draft/manuscript/template/**/*.synctex.gz
