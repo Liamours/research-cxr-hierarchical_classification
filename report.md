@@ -6,8 +6,8 @@ This repository is code-complete and tested on synthetic data. It has not yet
 been run on a real dataset, so there are no real accuracy numbers in this report.
 Every component (preprocessing, data loading, training, evaluation, inference,
 uncertainty, explainability) is verified end to end with dummy data through a
-committed test suite. The next step is to run the pre-registered protocol
-(`document/ibiomed_experiment_protocol-2606.md`) on NIH ChestX-ray14.
+committed test suite. The next step is to run the pre-registered experiment
+protocol on NIH ChestX-ray14.
 
 (An earlier version of this project did chest X-ray report generation. That code
 was moved out of the repository; this report describes the current
@@ -17,7 +17,7 @@ classification system.)
 
 The system performs flat multi-label classification of frontal chest radiographs
 into the official Indonesian clinical-authority disease set (51 diseases grounded
-in PDPI/PNPK/KKI; see context/research-cxr_canonical-diseases-2606.md), and adds
+in PDPI/PNPK/KKI guidelines), and adds
 two things on top of a plain classifier:
 
 1. a comparison of a convolutional backbone (DenseNet121) and a transformer
@@ -29,10 +29,9 @@ two things on top of a plain classifier:
 
 Training uses a combined pool of 6 datasets (NIH ChestX-ray14, CheXpert+,
 VinDr-CXR, VinDr-PCXR, TBX11K, COVIDx-CXR4) via a single 55-column canonical
-CSV (417,136 images). See `context/research-cxr_canonical-diseases-2606.md`
-for the clinical target list (Indonesian authority: PDPI/PNPK/KKI) and
-`configs/dataset_registry.json` for per-dataset image counts and annotated
-label sets. Multi-source pooling is enabled by masked BCE: each image is
+CSV (417,136 images). See `configs/dataset_registry.json` for per-dataset
+image counts and annotated label sets. Multi-source pooling is enabled by
+masked BCE: each image is
 supervised only on its source dataset's applicable labels; unannotated labels
 stay NaN-masked and receive no gradient. Cross-dataset label names are
 reconciled through `configs/label_equivalence.json`, guarded by a test that

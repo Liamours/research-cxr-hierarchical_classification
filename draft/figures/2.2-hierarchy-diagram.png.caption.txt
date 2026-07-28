@@ -1,1 +1,0 @@
-Diagram of the 13 is-a edges defined over the 51 canonical findings for the hierarchical training condition.
