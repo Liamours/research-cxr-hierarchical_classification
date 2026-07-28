@@ -18,7 +18,7 @@ from docx.enum.table import WD_ALIGN_VERTICAL
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, RGBColor
 
 REPO = Path(__file__).resolve().parents[1]
 SECTIONS = REPO / "draft/sections"
@@ -40,8 +40,51 @@ SYMBOLS = {
 
 # Front matter with no drafted content yet -- placeholders only, in paper order.
 # Remove an entry here once its real draft/sections/*.md file exists.
-FRONT_MATTER_PLACEHOLDERS = ["Authors", "Abstract", "Keywords", "Introduction"]
-END_MATTER_PLACEHOLDERS = ["Conclusion"]
+FRONT_MATTER_PLACEHOLDERS = ["Authors"]
+
+ABSTRACT_TEXT = (
+    "Chest X-rays serve as the first-line imaging exam for many thoracic "
+    "conditions. The shortage of radiologists, not the images, limits "
+    "throughput. Earlier work has used the dependence among findings, "
+    "since a specific pattern can point to a broader diagnostic category, "
+    "to improve multi-label classification. It is unknown whether that "
+    "gain holds when several public datasets are combined under one "
+    "label set, with only partial co-annotation of parent and child "
+    "labels. We merge seven public chest X-ray datasets into 527,745 "
+    "images labeled with 51 standard findings from an Indonesian "
+    "clinical guideline. A flat multi-label model is compared to one "
+    "regularized with a hierarchy-consistency penalty across 13 "
+    "parent-child relations, evaluated on discrimination, calibration, "
+    "selective prediction quality, hierarchy violation rate, and "
+    "localization. The hierarchy-consistency penalty does not clearly "
+    "outperform the flat baseline: discrimination is statistically "
+    "similar, flat wins on ranking and selective prediction, and "
+    "hierarchical wins only on hierarchy violation rate, traceable to "
+    "the small number of co-annotated parent-child pairs. Localization "
+    "is not usable at standard thresholds for either approach."
+)
+
+KEYWORDS_TEXT = (
+    "Chest radiography, multi-label classification, hierarchical "
+    "classification, deep learning, medical image analysis"
+)
+
+CONCLUSION_TEXT = (
+    "This paper tested whether a hierarchy-consistency penalty improves "
+    "multi-label chest radiograph classification once training data is "
+    "pooled from seven public sources rather than drawn from one. It does "
+    "not, at least not clearly: hierarchical training ties flat training "
+    "on overall discrimination, loses on ranking and selective-prediction "
+    "quality, and gains only a modest reduction in hierarchy violations, "
+    "concentrated on the single parent-child pair in this corpus with "
+    "enough co-annotated data to give the penalty a gradient signal. This "
+    "points to a data problem rather than a modeling one. Grad-CAM "
+    "localization was also not usable at standard thresholds for either "
+    "condition. Both conditions come from a single training run each, so "
+    "these results bound sampling noise on one test set, not "
+    "seed-to-seed variance, and repeated runs remain the most direct way "
+    "to close that gap."
+)
 
 
 @dataclass
@@ -63,6 +106,24 @@ FIGURE_WIDTH = {
 def section_files():
     files = [f for f in SECTIONS.iterdir() if SECTION_FILE_RE.match(f.name)]
     return sorted(files, key=lambda f: tuple(int(p) for p in f.stem.split("-", 1)[0].split(".")))
+
+
+CITATION_RE = re.compile(r"\{cite:(\w+)\}")
+CITATION_ORDER: dict = {}  # bib key -> number, by first-appearance order in reading order
+
+
+def compute_citation_order():
+    CITATION_ORDER.clear()
+    for f in section_files():
+        if f.stem == "0-title":
+            continue
+        for key in CITATION_RE.findall(f.read_text(encoding="utf-8")):
+            if key not in CITATION_ORDER:
+                CITATION_ORDER[key] = len(CITATION_ORDER) + 1
+
+
+def resolve_citations_docx(text: str) -> str:
+    return CITATION_RE.sub(lambda m: f"[{CITATION_ORDER.get(m.group(1), '?')}]", text)
 
 
 def heading_level(stem: str) -> int:
@@ -149,6 +210,7 @@ def add_prose_paragraph(doc: Document, text: str):
     # Strip inline single-dollar math to plain text -- no special glyph handling,
     # keeps prose readable without a full inline-math renderer.
     text = re.sub(r"\$([^$]*)\$", lambda m: latexish_to_plain(m.group(1)), text)
+    text = resolve_citations_docx(text)
     run = p.add_run(text)
     run.font.name = "Times New Roman"
     run.font.size = Pt(11)
@@ -370,6 +432,16 @@ def add_placeholder_section(doc: Document, title: str):
     run.font.size = Pt(11)
 
 
+def add_text_section(doc: Document, title: str, text: str, bold: bool = False):
+    doc.add_heading(title, level=1)
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    run = p.add_run(text)
+    run.font.name = "Times New Roman"
+    run.font.size = Pt(11)
+    run.bold = bold
+
+
 BIB_FIELD_RE = re.compile(r"(\w+)\s*=\s*\{([^{}]*)\}")
 BIB_ENTRY_START_RE = re.compile(r"@(\w+)\s*\{([^,]+),")
 
@@ -398,29 +470,44 @@ def format_bib_entry(raw_entry: str) -> str:
 
 def add_references(doc: Document):
     bib_files = list(REFERENCES.glob("*.bib"))
-    entries = []
+    keyed_entries = []  # (bib key or None, formatted text)
     if bib_files:
         raw = bib_files[0].read_text(encoding="utf-8")
         for raw_entry in re.split(r"\n(?=@)", raw):
             raw_entry = raw_entry.strip()
-            if raw_entry:
-                entries.append(format_bib_entry(raw_entry))
+            if not raw_entry:
+                continue
+            m = BIB_ENTRY_START_RE.match(raw_entry)
+            key = m.group(2).strip() if m else None
+            keyed_entries.append((key, format_bib_entry(raw_entry)))
 
     doc.add_heading("References", level=1)
-    if not entries:
+    if not keyed_entries:
         p = doc.add_paragraph()
         run = p.add_run("[References -- to be added.]")
         run.italic = True
         run.font.name = "Times New Roman"
         run.font.size = Pt(11)
         return
-    for i, entry in enumerate(entries, 1):
+
+    # Order by citation-order-of-first-appearance in prose, matching what
+    # LaTeX/bibtex numbers to once real \cite{} keys resolve. Anything not
+    # actually cited in prose falls back to file order, numbered after.
+    cited = sorted(
+        ((CITATION_ORDER[k], t) for k, t in keyed_entries if k in CITATION_ORDER),
+        key=lambda x: x[0],
+    )
+    uncited = [t for k, t in keyed_entries if k not in CITATION_ORDER]
+    ordered = [t for _, t in cited] + uncited
+
+    for i, entry in enumerate(ordered, 1):
         p = doc.add_paragraph(f"[{i}] {entry}")
         p.paragraph_format.left_indent = Inches(0.3)
         p.paragraph_format.first_line_indent = Inches(-0.3)
 
 
 def build():
+    compute_citation_order()
     doc = Document()
     style = doc.styles["Normal"]
     style.font.name = "Times New Roman"
@@ -428,6 +515,26 @@ def build():
     section = doc.sections[0]
     section.left_margin = section.right_margin = Inches(1)
     section.top_margin = section.bottom_margin = Inches(1)
+
+    # Word's built-in Title/Heading styles default to a blue theme color, and
+    # Title carries a bottom paragraph border (renders as a horizontal rule
+    # under the title) -- force plain black, no border, single column throughout.
+    for name in ("Title", "Heading 1", "Heading 2", "Heading 3"):
+        heading_style = doc.styles[name]
+        heading_style.font.name = "Times New Roman"
+        heading_style.font.color.rgb = RGBColor(0, 0, 0)
+        # font.name alone leaves w:asciiTheme/w:hAnsiTheme in place, which
+        # Word prioritizes over the explicit ascii/hAnsi font -- strip the
+        # theme references so Times New Roman actually wins.
+        rFonts = heading_style.element.get_or_add_rPr().find(qn("w:rFonts"))
+        if rFonts is not None:
+            for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+                if rFonts.get(qn(f"w:{attr}")) is not None:
+                    del rFonts.attrib[qn(f"w:{attr}")]
+        pPr = heading_style.element.get_or_add_pPr()
+        pBdr = pPr.find(qn("w:pBdr"))
+        if pBdr is not None:
+            pPr.remove(pBdr)
 
     counters = Counters()
     files = section_files()
@@ -437,14 +544,15 @@ def build():
         files = files[1:]
         for name in FRONT_MATTER_PLACEHOLDERS:
             add_placeholder_section(doc, name)
+        add_text_section(doc, "Abstract", ABSTRACT_TEXT)
+        add_text_section(doc, "Keywords", KEYWORDS_TEXT, bold=True)
 
     for f in files:
         level = min(heading_level(f.stem), 3)
         doc.add_heading(heading_text(f.stem), level=level)
         add_content_blocks(doc, counters, f.read_text(encoding="utf-8"))
 
-    for name in END_MATTER_PLACEHOLDERS:
-        add_placeholder_section(doc, name)
+    add_text_section(doc, "Conclusion", CONCLUSION_TEXT)
 
     add_references(doc)
 
