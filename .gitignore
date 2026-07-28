@@ -96,18 +96,5 @@ document/latex/*.log
 document/latex/*.fls
 document/latex/*.fdb_latexmk
 
-# Paper draft figures/tables ARE the deliverable, not dataset files —
-# override the blanket *.png / *.csv excludes above for this folder only
-!draft/figures/*.png
-!draft/tables/*.csv
-!draft/references/*.csv
-
-# Built manuscript output (regenerate with scripts/build_docx.py; source of
-# truth is draft/sections + draft/equations + draft/tables + draft/figures)
-draft/manuscript/*.docx
-draft/manuscript/*.pdf
-
-# IEEE template kit is a static resource, not build output or dataset files —
-# override the blanket *.pdf / *.png excludes for this folder only
-!draft/manuscript/template/**
-draft/manuscript/template/**/*.synctex.gz
+# Paper draft (manuscript, figures, tables, references) — kept local, never pushed
+/draft/

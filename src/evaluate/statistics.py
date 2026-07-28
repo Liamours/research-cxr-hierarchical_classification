@@ -6,9 +6,9 @@ bootstrap_metric_ci: 95% CI via percentile bootstrap (n_boot=1000) over
 compare_aurc: pairwise comparison of AURC between two conditions using
     bootstrap hypothesis test (one-tailed: H1: AURC_A < AURC_B).
 
-compare_auroc_delong: DeLong variance estimator for macro AUROC comparison
-    (Hanley & McNeil 1983; structural components method). When per-class
-    sample counts are too small for DeLong, falls back to bootstrap.
+compare_auroc_macro, compare_f1_macro: same paired bootstrap-delta pattern
+    as compare_aurc, applied to AUROC macro and F1 macro (one-tailed:
+    H1: metric_A > metric_B). All three share the _compare_metric helper.
 
 mcnemar_comparison: McNemar's test comparing two classifiers on matched
     binary decisions (threshold 0.5) over all masked (sample, label) pairs.
@@ -113,8 +113,65 @@ def bootstrap_metric_ci(probs, targets, mask, conditions=CANONICAL_LABELS,
 
 
 # ---------------------------------------------------------------------------
-# AURC comparison (bootstrap one-tailed test)
+# Paired bootstrap-delta comparison (AURC, AUROC macro, F1 macro)
 # ---------------------------------------------------------------------------
+
+def _compare_metric(
+    metric_fn, metric_name,
+    probs_a, targets_a, mask_a,
+    probs_b, targets_b, mask_b,
+    higher_is_better: bool,
+    n_boot: int = 1000,
+    label: tuple[str, str] = ("A", "B"),
+) -> dict:
+    """Shared bootstrap one-tailed delta test for any metric_fn(probs, targets, mask) -> float.
+
+    Samples (N, C) row-paired when arrays have the same first dimension
+    (same test set, different model predictions). Falls back to independent
+    resampling when sizes differ. H1 is "A is better than B" in whichever
+    direction higher_is_better implies.
+    """
+    probs_a, targets_a, mask_a = _np(probs_a), _np(targets_a), _np(mask_a)
+    probs_b, targets_b, mask_b = _np(probs_b), _np(targets_b), _np(mask_b)
+    paired = probs_a.shape[0] == probs_b.shape[0]
+    rng = np.random.default_rng(0)
+
+    est_a = metric_fn(probs_a, targets_a, mask_a)
+    est_b = metric_fn(probs_b, targets_b, mask_b)
+    obs_delta = est_a - est_b
+
+    Na, Nb = probs_a.shape[0], probs_b.shape[0]
+    boot_deltas = []
+    for _ in range(n_boot):
+        if paired:
+            idx = rng.integers(0, Na, size=Na)
+            a = metric_fn(probs_a[idx], targets_a[idx], mask_a[idx])
+            b = metric_fn(probs_b[idx], targets_b[idx], mask_b[idx])
+        else:
+            ia = rng.integers(0, Na, size=Na)
+            ib = rng.integers(0, Nb, size=Nb)
+            a = metric_fn(probs_a[ia], targets_a[ia], mask_a[ia])
+            b = metric_fn(probs_b[ib], targets_b[ib], mask_b[ib])
+        boot_deltas.append(a - b)
+
+    boot_deltas = np.array(boot_deltas)
+    boot_deltas = boot_deltas[~np.isnan(boot_deltas)]
+    # p-value for H1 "A better than B": higher-is-better -> A>B, lower-is-better -> A<B
+    p_value = float(np.mean(boot_deltas <= 0)) if higher_is_better else float(np.mean(boot_deltas >= 0))
+    ci_delta_lo = float(np.percentile(boot_deltas, 2.5))
+    ci_delta_hi = float(np.percentile(boot_deltas, 97.5))
+    direction = ">" if higher_is_better else "<"
+
+    return {
+        f"{metric_name}_a": {"name": label[0], "estimate": round(est_a, 4)},
+        f"{metric_name}_b": {"name": label[1], "estimate": round(est_b, 4)},
+        "delta_a_minus_b": round(obs_delta, 4),
+        "delta_ci_95": [round(ci_delta_lo, 4), round(ci_delta_hi, 4)],
+        "p_value_h1_a_better": round(p_value, 4),
+        "significant_at_0.05": bool(p_value < 0.05),
+        "note": f"one-tailed bootstrap; H1: {metric_name}_A {direction} {metric_name}_B",
+    }
+
 
 def compare_aurc(
     probs_a, targets_a, mask_a,
@@ -124,49 +181,56 @@ def compare_aurc(
 ) -> dict:
     """Bootstrap one-tailed test: H0: AURC_A >= AURC_B, H1: AURC_A < AURC_B.
 
-    Samples (N, C) row-paired when arrays have the same first dimension
-    (same test set, different model predictions). Falls back to independent
-    resampling when sizes differ.
-
     Returns p-value and CIs for both conditions, plus the observed delta.
     """
-    probs_a, targets_a, mask_a = _np(probs_a), _np(targets_a), _np(mask_a)
-    probs_b, targets_b, mask_b = _np(probs_b), _np(targets_b), _np(mask_b)
-    paired = probs_a.shape[0] == probs_b.shape[0]
-    rng = np.random.default_rng(0)
-
-    aurc_a = aurc_flat(probs_a, targets_a, mask_a)
-    aurc_b = aurc_flat(probs_b, targets_b, mask_b)
-    obs_delta = aurc_a - aurc_b   # negative = A is better
-
-    Na, Nb = probs_a.shape[0], probs_b.shape[0]
-    boot_deltas = []
-    for _ in range(n_boot):
-        if paired:
-            idx = rng.integers(0, Na, size=Na)
-            a = aurc_flat(probs_a[idx], targets_a[idx], mask_a[idx])
-            b = aurc_flat(probs_b[idx], targets_b[idx], mask_b[idx])
-        else:
-            ia = rng.integers(0, Na, size=Na)
-            ib = rng.integers(0, Nb, size=Nb)
-            a = aurc_flat(probs_a[ia], targets_a[ia], mask_a[ia])
-            b = aurc_flat(probs_b[ib], targets_b[ib], mask_b[ib])
-        boot_deltas.append(a - b)
-
-    boot_deltas = np.array(boot_deltas)
-    p_value = float(np.mean(boot_deltas >= 0))   # fraction where A not better than B
-    ci_delta_lo = float(np.percentile(boot_deltas, 2.5))
-    ci_delta_hi = float(np.percentile(boot_deltas, 97.5))
-
+    out = _compare_metric(
+        aurc_flat, "aurc",
+        probs_a, targets_a, mask_a, probs_b, targets_b, mask_b,
+        higher_is_better=False, n_boot=n_boot, label=label,
+    )
+    # preserve original key names / p-value semantics for backward compatibility
     return {
-        "aurc_a": {"name": label[0], "estimate": round(aurc_a, 4)},
-        "aurc_b": {"name": label[1], "estimate": round(aurc_b, 4)},
-        "delta_a_minus_b": round(obs_delta, 4),
-        "delta_ci_95": [round(ci_delta_lo, 4), round(ci_delta_hi, 4)],
-        "p_value_h1_a_lt_b": round(p_value, 4),
-        "significant_at_0.05": bool(p_value < 0.05),
+        "aurc_a": out["aurc_a"], "aurc_b": out["aurc_b"],
+        "delta_a_minus_b": out["delta_a_minus_b"],
+        "delta_ci_95": out["delta_ci_95"],
+        "p_value_h1_a_lt_b": out["p_value_h1_a_better"],
+        "significant_at_0.05": out["significant_at_0.05"],
         "note": "one-tailed bootstrap; H1: AURC_A < AURC_B (A has lower risk)",
     }
+
+
+def compare_auroc_macro(
+    probs_a, targets_a, mask_a,
+    probs_b, targets_b, mask_b,
+    conditions=CANONICAL_LABELS,
+    n_boot: int = 1000,
+    label: tuple[str, str] = ("A", "B"),
+) -> dict:
+    """Bootstrap one-tailed test: H1: AUROC_macro_A > AUROC_macro_B."""
+    def _auroc_macro(p, t, m):
+        return _macro(per_class_auroc(p, t, m, conditions))
+    return _compare_metric(
+        _auroc_macro, "auroc_macro",
+        probs_a, targets_a, mask_a, probs_b, targets_b, mask_b,
+        higher_is_better=True, n_boot=n_boot, label=label,
+    )
+
+
+def compare_f1_macro(
+    probs_a, targets_a, mask_a,
+    probs_b, targets_b, mask_b,
+    conditions=CANONICAL_LABELS,
+    n_boot: int = 1000,
+    label: tuple[str, str] = ("A", "B"),
+) -> dict:
+    """Bootstrap one-tailed test: H1: F1_macro_A > F1_macro_B."""
+    def _f1_macro(p, t, m):
+        return _macro(per_class_f1(p, t, m, conditions))
+    return _compare_metric(
+        _f1_macro, "f1_macro",
+        probs_a, targets_a, mask_a, probs_b, targets_b, mask_b,
+        higher_is_better=True, n_boot=n_boot, label=label,
+    )
 
 
 # ---------------------------------------------------------------------------
