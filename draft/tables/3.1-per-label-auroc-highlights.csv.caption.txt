@@ -1,1 +1,0 @@
-Per-label AUROC on the test partition for the five best discriminated and five worst discriminated findings.
